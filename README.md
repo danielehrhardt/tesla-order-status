@@ -1,6 +1,6 @@
 # Tesla Order Status Checker
 
-A TypeScript script for Bun that fetches and tracks your Tesla order status using the Tesla API.
+A TypeScript application for tracking your Tesla order status using the Tesla API. Available as both a CLI tool and a web application.
 
 ## Features
 
@@ -25,9 +25,32 @@ curl -fsSL https://bun.sh/install | bash
 
 ## Usage
 
-Run the script:
+### Web Application (NEW!)
+
+Start the web server:
 ```bash
-bun run tesla-order-status.ts
+bun start
+# or
+bun dev
+```
+
+Then open your browser and navigate to: http://localhost:3000
+
+The web version features:
+- Modern, responsive UI with dark theme
+- Browser-based authentication flow
+- Local storage for tokens and order history
+- Real-time order comparison
+- Auto-refresh capabilities
+- No server-side storage - everything stays in your browser
+
+### CLI Version
+
+Run the CLI script:
+```bash
+bun cli
+# or directly
+bun tesla-order-status.ts
 ```
 
 ### First Run
@@ -49,10 +72,20 @@ On first run, the script will:
 
 ## Files
 
-- `tesla-order-status.ts` - Main script
-- `tesla-stores.ts` - Tesla store locations enum
-- `tesla_tokens.json` - Saved authentication tokens (created after first run)
-- `tesla_orders.json` - Saved order data for comparison (created after first run)
+### Core Files
+- `tesla-order-status.ts` - CLI version script
+- `tesla-stores.ts` - Tesla store locations enum and helper functions
+
+### Web Application Files
+- `server.ts` - Bun web server with API endpoints
+- `index.html` - HTML entry point
+- `frontend.tsx` - React frontend application
+- `styles.css` - Modern UI styles
+
+### Data Files (auto-generated)
+- `tesla_tokens.json` - Saved authentication tokens (CLI version)
+- `tesla_orders.json` - Saved order data for comparison (CLI version)
+- Browser LocalStorage - Tokens and orders (Web version)
 
 ## Preview
 
