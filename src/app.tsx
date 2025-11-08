@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 
 // Type definitions
@@ -116,22 +116,18 @@ export default function App() {
   const [showComparison, setShowComparison] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [authCode, setAuthCode] = useState('');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const authWindowRef = useRef<Window | null>(null);
+  const clipboardIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize from localStorage on mount
   useEffect(() => {
     const storedTokens = loadFromLocalStorage<TokenData>(STORAGE_KEYS.TOKENS);
-    const authSuccess = localStorage.getItem('tesla_auth_success');
 
-    // Check if we just completed auth
-    if (authSuccess === 'true') {
-      localStorage.removeItem('tesla_auth_success');
-      const newTokens = loadFromLocalStorage<TokenData>(STORAGE_KEYS.TOKENS);
-      if (newTokens) {
-        setTokens(newTokens);
-        setIsAuthenticated(true);
-        fetchOrdersWithToken(newTokens);
-      }
-    } else if (storedTokens) {
+    if (storedTokens) {
       checkAndRefreshToken(storedTokens);
     }
   }, []);
@@ -146,6 +142,15 @@ export default function App() {
 
     return () => clearInterval(intervalId);
   }, [autoRefresh, refreshInterval, isAuthenticated]);
+
+  // Cleanup clipboard monitoring
+  useEffect(() => {
+    return () => {
+      if (clipboardIntervalRef.current) {
+        clearInterval(clipboardIntervalRef.current);
+      }
+    };
+  }, []);
 
   const checkAndRefreshToken = async (tokenData: TokenData) => {
     try {
@@ -193,18 +198,118 @@ export default function App() {
   const handleStartAuth = async () => {
     setLoading(true);
     setError(null);
+    setShowAuthModal(true);
 
     try {
       const response = await fetch('/api/auth/generate-url');
       const data = await response.json();
 
-      // Store session ID
+      setAuthUrl(data.authUrl);
+      setSessionId(data.sessionId);
       saveToLocalStorage(STORAGE_KEYS.SESSION_ID, data.sessionId);
 
-      // Redirect to Tesla auth in the same window
-      window.location.href = data.authUrl;
+      // Open auth URL in popup window
+      const width = 800;
+      const height = 600;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+
+      authWindowRef.current = window.open(
+        data.authUrl,
+        'TeslaAuth',
+        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes`
+      );
+
+      // Start monitoring clipboard for automatic detection
+      startClipboardMonitoring();
     } catch (err) {
-      setError('Failed to start authentication');
+      setError('Failed to generate authentication URL');
+      setShowAuthModal(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startClipboardMonitoring = () => {
+    // Only works with modern browsers that support clipboard API
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      clipboardIntervalRef.current = setInterval(async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text.includes('auth.tesla.com/void/callback') && text.includes('code=')) {
+            setAuthCode(text);
+            if (clipboardIntervalRef.current) {
+              clearInterval(clipboardIntervalRef.current);
+            }
+          }
+        } catch (err) {
+          // User hasn't granted clipboard permission, ignore
+        }
+      }, 1000);
+    }
+  };
+
+  const handleAuthCodeSubmit = async () => {
+    if (!authCode || !sessionId) {
+      setError('Please enter the authorization URL');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Extract code from URL
+      let code = authCode;
+      if (authCode.includes('code=')) {
+        const url = new URL(authCode);
+        code = url.searchParams.get('code') || '';
+      }
+
+      if (!code) {
+        throw new Error('No authorization code found in the URL');
+      }
+
+      const response = await fetch('/api/auth/exchange-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, sessionId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to exchange code for tokens');
+      }
+
+      const tokenData = await response.json();
+      const tokensWithTime = {
+        ...tokenData,
+        created_at: Date.now(),
+      };
+
+      setTokens(tokensWithTime);
+      saveToLocalStorage(STORAGE_KEYS.TOKENS, tokensWithTime);
+      setIsAuthenticated(true);
+      setAuthCode('');
+      setAuthUrl(null);
+      setSessionId(null);
+      setShowAuthModal(false);
+      removeFromLocalStorage(STORAGE_KEYS.SESSION_ID);
+
+      // Close auth window if still open
+      if (authWindowRef.current && !authWindowRef.current.closed) {
+        authWindowRef.current.close();
+      }
+
+      // Stop clipboard monitoring
+      if (clipboardIntervalRef.current) {
+        clearInterval(clipboardIntervalRef.current);
+      }
+
+      // Fetch orders immediately after authentication
+      await fetchOrdersWithToken(tokensWithTime);
+    } catch (err: any) {
+      setError(err.message || 'Failed to authenticate');
     } finally {
       setLoading(false);
     }
@@ -302,6 +407,7 @@ export default function App() {
     setDifferences([]);
     removeFromLocalStorage(STORAGE_KEYS.TOKENS);
     removeFromLocalStorage(STORAGE_KEYS.SESSION_ID);
+    setShowAuthModal(false);
   };
 
   const handleClearData = () => {
@@ -458,7 +564,7 @@ export default function App() {
                 {loading ? 'Starting...' : 'Start Authentication'}
               </button>
               <p className="text-xs text-gray-500 mt-4">
-                You'll be redirected to Tesla's secure login page
+                A popup window will open for Tesla login
               </p>
               {error && (
                 <div className="mt-4 p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm">
@@ -564,6 +670,72 @@ export default function App() {
           </>
         )}
       </main>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 max-w-lg w-full">
+            <h3 className="text-2xl font-bold text-white mb-4">Complete Authentication</h3>
+
+            <div className="space-y-4">
+              <div className="bg-blue-900/20 border border-blue-900/50 rounded-lg p-4">
+                <p className="text-blue-400 text-sm">
+                  <strong>Step 1:</strong> Log in with your Tesla account in the popup window
+                </p>
+                <p className="text-blue-400 text-sm mt-2">
+                  <strong>Step 2:</strong> After login, you'll see a "Page Not Found" error - this is normal!
+                </p>
+                <p className="text-blue-400 text-sm mt-2">
+                  <strong>Step 3:</strong> Copy the entire URL from that page and paste it below
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-gray-400 text-sm">Paste the redirect URL here:</label>
+                <textarea
+                  value={authCode}
+                  onChange={(e) => setAuthCode(e.target.value)}
+                  placeholder="https://auth.tesla.com/void/callback?code=..."
+                  className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-red-900 focus:outline-none focus:ring-1 focus:ring-red-900 resize-none"
+                  rows={3}
+                />
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleAuthCodeSubmit}
+                  disabled={loading || !authCode}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Authenticating...' : 'Complete Authentication'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAuthModal(false);
+                    setAuthCode('');
+                    setError(null);
+                    if (authWindowRef.current && !authWindowRef.current.closed) {
+                      authWindowRef.current.close();
+                    }
+                    if (clipboardIntervalRef.current) {
+                      clearInterval(clipboardIntervalRef.current);
+                    }
+                  }}
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all duration-200 border border-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="mt-auto border-t border-gray-800 bg-gray-900/50 backdrop-blur">
