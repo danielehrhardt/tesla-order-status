@@ -740,7 +740,7 @@ export default function App() {
       {/* Footer */}
       <footer className="mt-auto border-t border-gray-800 bg-gray-900/50 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
-          <p className="text-gray-400">Tesla Order Status Tracker - Built with Bun & React</p>
+          <p className="text-gray-400">Tesla Order Status Tracker</p>
           <p className="text-xs text-gray-600 mt-2">
             Your authentication tokens and order data are stored locally in your browser
           </p>

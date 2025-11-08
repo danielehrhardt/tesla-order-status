@@ -2,6 +2,9 @@
 
 A TypeScript application for tracking your Tesla order status using the Tesla API. Available as both a CLI tool and a web application.
 
+
+https://tesla-order-status.codext.de
+
 ## Features
 
 - OAuth2 PKCE authentication with Tesla
