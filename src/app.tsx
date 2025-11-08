@@ -31,6 +31,7 @@ interface OrderDetails {
         vehicleOdometer?: string;
         vehicleOdometerType?: string;
         vehicleRoutingLocation?: number;
+        routingLocationLabel?: string;
       };
     };
     finalPayment?: {
@@ -46,11 +47,43 @@ interface DetailedOrder {
   details: OrderDetails;
 }
 
+// History and Timeline types
+interface ChangeOperation {
+  key: string;
+  operation: 'added' | 'removed' | 'changed';
+  oldValue?: any;
+  newValue?: any;
+}
+
+interface HistoryEntry {
+  timestamp: number;
+  changes: ChangeOperation[];
+}
+
+interface TimelineEvent {
+  timestamp: number;
+  key: string;
+  value: any;
+  label: string;
+  isNew?: boolean;
+}
+
+// Privacy settings
+interface PrivacySettings {
+  maskVIN: boolean;
+  maskOrderId: boolean;
+  vinMaskLength: number;
+  orderIdMaskLength: number;
+}
+
 // Storage keys
 const STORAGE_KEYS = {
   TOKENS: 'tesla_tokens',
   ORDERS: 'tesla_orders',
   SESSION_ID: 'tesla_session_id',
+  HISTORY: 'tesla_history',
+  TIMELINE: 'tesla_timeline',
+  PRIVACY_SETTINGS: 'tesla_privacy_settings',
 };
 
 // Utility functions
@@ -80,38 +113,66 @@ function formatDate(dateString?: string): string {
   }
 }
 
-function compareDicts(oldDict: any, newDict: any, path: string = ''): string[] {
-  const differences: string[] = [];
+// Enhanced comparison function that returns structured change operations
+function compareDicts(oldDict: any, newDict: any, path: string = ''): ChangeOperation[] {
+  const changes: ChangeOperation[] = [];
 
   // Helper function to check if values are effectively equal
   const areValuesEqual = (val1: any, val2: any): boolean => {
-    // Strict equality check
     if (val1 === val2) return true;
-
-    // Treat null and undefined as equal
     if ((val1 === null || val1 === undefined) && (val2 === null || val2 === undefined)) {
       return true;
     }
-
-    // Handle arrays - compare by content
     if (Array.isArray(val1) && Array.isArray(val2)) {
       return JSON.stringify(val1) === JSON.stringify(val2);
     }
-
-    // Handle objects - compare by content (for leaf nodes)
     if (typeof val1 === 'object' && val1 !== null && typeof val2 === 'object' && val2 !== null) {
-      // Use JSON comparison for simple objects
       try {
         return JSON.stringify(val1) === JSON.stringify(val2);
       } catch {
         return false;
       }
     }
-
     return false;
   };
 
-  // Helper to format values for display
+  for (const key in oldDict) {
+    if (!(key in newDict)) {
+      changes.push({
+        key: `${path}${key}`,
+        operation: 'removed',
+        oldValue: oldDict[key],
+      });
+    } else if (typeof oldDict[key] === 'object' && oldDict[key] !== null &&
+               typeof newDict[key] === 'object' && newDict[key] !== null &&
+               !Array.isArray(oldDict[key]) && !Array.isArray(newDict[key])) {
+      // Recursively compare nested objects
+      changes.push(...compareDicts(oldDict[key], newDict[key], `${path}${key}.`));
+    } else if (!areValuesEqual(oldDict[key], newDict[key])) {
+      changes.push({
+        key: `${path}${key}`,
+        operation: 'changed',
+        oldValue: oldDict[key],
+        newValue: newDict[key],
+      });
+    }
+  }
+
+  for (const key in newDict) {
+    if (!(key in oldDict)) {
+      changes.push({
+        key: `${path}${key}`,
+        operation: 'added',
+        newValue: newDict[key],
+      });
+    }
+  }
+
+  return changes;
+}
+
+// Convert change operations to display strings (for backward compatibility)
+function formatChangeOperations(changes: ChangeOperation[]): string[] {
   const formatValue = (val: any): string => {
     if (val === null) return 'null';
     if (val === undefined) return 'undefined';
@@ -120,29 +181,246 @@ function compareDicts(oldDict: any, newDict: any, path: string = ''): string[] {
     return String(val);
   };
 
-  for (const key in oldDict) {
-    if (!(key in newDict)) {
-      differences.push(`- Removed key '${path}${key}'`);
-    } else if (typeof oldDict[key] === 'object' && oldDict[key] !== null &&
-               typeof newDict[key] === 'object' && newDict[key] !== null &&
-               !Array.isArray(oldDict[key]) && !Array.isArray(newDict[key])) {
-      // Recursively compare nested objects
-      differences.push(...compareDicts(oldDict[key], newDict[key], `${path}${key}.`));
-    } else if (!areValuesEqual(oldDict[key], newDict[key])) {
-      // Only report actual differences
-      differences.push(`- ${path}${key}: ${formatValue(oldDict[key])}`);
-      differences.push(`+ ${path}${key}: ${formatValue(newDict[key])}`);
+  return changes.map(change => {
+    switch (change.operation) {
+      case 'added':
+        return `+ Added key '${change.key}': ${formatValue(change.newValue)}`;
+      case 'removed':
+        return `- Removed key '${change.key}'`;
+      case 'changed':
+        return `≠ ${change.key}: ${formatValue(change.oldValue)} → ${formatValue(change.newValue)}`;
+      default:
+        return '';
+    }
+  });
+}
+
+// History management functions
+function saveHistoryEntry(changes: ChangeOperation[]): void {
+  if (changes.length === 0) return;
+
+  const history = loadFromLocalStorage<HistoryEntry[]>(STORAGE_KEYS.HISTORY) || [];
+  history.push({
+    timestamp: Date.now(),
+    changes,
+  });
+  saveToLocalStorage(STORAGE_KEYS.HISTORY, history);
+}
+
+function getHistory(): HistoryEntry[] {
+  return loadFromLocalStorage<HistoryEntry[]>(STORAGE_KEYS.HISTORY) || [];
+}
+
+// Timeline management functions
+function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+  const seenKeys = new Set<string>();
+
+  // Extract events from current order state
+  orders.forEach((detailedOrder, index) => {
+    const orderInfo = detailedOrder.details?.tasks?.registration?.orderDetails;
+    const scheduling = detailedOrder.details?.tasks?.scheduling;
+    const finalPayment = detailedOrder.details?.tasks?.finalPayment?.data;
+
+    // Add reservation date
+    if (orderInfo?.reservationDate) {
+      const key = `order.${index}.reservationDate`;
+      events.push({
+        timestamp: new Date(orderInfo.reservationDate).getTime(),
+        key,
+        value: orderInfo.reservationDate,
+        label: 'Reservation',
+      });
+      seenKeys.add(key);
+    }
+
+    // Add order booked date
+    if (orderInfo?.orderBookedDate) {
+      const key = `order.${index}.orderBookedDate`;
+      events.push({
+        timestamp: new Date(orderInfo.orderBookedDate).getTime(),
+        key,
+        value: orderInfo.orderBookedDate,
+        label: 'Order Booked',
+      });
+      seenKeys.add(key);
+    }
+
+    // Add VIN assignment (if present, use current time as we don't have exact assignment date)
+    if (detailedOrder.order.vin) {
+      const key = `order.${index}.vin`;
+      if (!seenKeys.has(key)) {
+        events.push({
+          timestamp: Date.now(),
+          key,
+          value: detailedOrder.order.vin,
+          label: 'VIN Assigned',
+        });
+        seenKeys.add(key);
+      }
+    }
+
+    // Add delivery window
+    if (scheduling?.deliveryWindowDisplay) {
+      const key = `order.${index}.deliveryWindow`;
+      if (!seenKeys.has(key)) {
+        events.push({
+          timestamp: Date.now(),
+          key,
+          value: scheduling.deliveryWindowDisplay,
+          label: 'Delivery Window',
+        });
+        seenKeys.add(key);
+      }
+    }
+
+    // Add odometer reading (indicates car is built)
+    if (orderInfo?.vehicleOdometer) {
+      const key = `order.${index}.carBuilt`;
+      if (!seenKeys.has(key)) {
+        events.push({
+          timestamp: Date.now(),
+          key,
+          value: `${orderInfo.vehicleOdometer} ${orderInfo.vehicleOdometerType || ''}`,
+          label: 'Car Built',
+        });
+        seenKeys.add(key);
+      }
+    }
+  });
+
+  // Add events from history
+  history.forEach(entry => {
+    entry.changes.forEach(change => {
+      // Check if this is a significant event worth adding to timeline
+      const lowerKey = change.key.toLowerCase();
+
+      if (lowerKey.includes('vin') ||
+          lowerKey.includes('deliverywindow') ||
+          lowerKey.includes('orderstatus') ||
+          lowerKey.includes('vehicleodometer') ||
+          lowerKey.includes('appointment')) {
+
+        const eventKey = `${change.key}.${change.operation}`;
+        const existingEvent = events.find(e => e.key === change.key);
+
+        events.push({
+          timestamp: entry.timestamp,
+          key: change.key,
+          value: change.newValue || change.oldValue,
+          label: translateKeyToLabel(change.key),
+          isNew: !!existingEvent, // Mark as "new" if key already exists
+        });
+      }
+    });
+  });
+
+  // Sort by timestamp
+  return events.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function translateKeyToLabel(key: string): string {
+  const lowerKey = key.toLowerCase();
+
+  if (lowerKey.includes('vin')) return 'VIN';
+  if (lowerKey.includes('deliverywindow')) return 'Delivery Window';
+  if (lowerKey.includes('orderstatus')) return 'Order Status';
+  if (lowerKey.includes('vehicleodometer')) return 'Odometer';
+  if (lowerKey.includes('appointment')) return 'Appointment';
+  if (lowerKey.includes('reservation')) return 'Reservation';
+  if (lowerKey.includes('orderbooked')) return 'Order Booked';
+  if (lowerKey.includes('etatodeliverycenter')) return 'ETA to Center';
+
+  // Default: capitalize and remove path prefixes
+  const parts = key.split('.');
+  const lastPart = parts[parts.length - 1];
+  return lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+}
+
+// Privacy/masking functions
+function maskString(str: string, maskLength: number): string {
+  if (!str || maskLength >= str.length) return '█'.repeat(str.length);
+  const visibleChars = Math.max(0, str.length - maskLength);
+  return '█'.repeat(maskLength) + str.slice(visibleChars);
+}
+
+function applyPrivacyMask(data: any, settings: PrivacySettings): any {
+  if (!data) return data;
+
+  const masked = JSON.parse(JSON.stringify(data)); // Deep clone
+
+  function maskObject(obj: any, path: string = ''): void {
+    for (const key in obj) {
+      const currentPath = path ? `${path}.${key}` : key;
+
+      if (typeof obj[key] === 'object' && obj[key] !== null) {
+        maskObject(obj[key], currentPath);
+      } else if (typeof obj[key] === 'string') {
+        const lowerKey = key.toLowerCase();
+
+        if (settings.maskVIN && lowerKey === 'vin') {
+          obj[key] = maskString(obj[key], settings.vinMaskLength);
+        } else if (settings.maskOrderId && (lowerKey === 'referencenumber' || lowerKey === 'orderid')) {
+          obj[key] = maskString(obj[key], settings.orderIdMaskLength);
+        }
+      }
     }
   }
 
-  for (const key in newDict) {
-    if (!(key in oldDict)) {
-      const formattedValue = formatValue(newDict[key]);
-      differences.push(`+ Added key '${path}${key}': ${formattedValue}`);
+  maskObject(masked);
+  return masked;
+}
+
+// Share/Export functions
+function generateMarkdownSummary(orders: DetailedOrder[], timeline: TimelineEvent[], settings: PrivacySettings): string {
+  const maskedOrders = applyPrivacyMask(orders, settings);
+
+  let markdown = '# Tesla Order Status Summary\n\n';
+  markdown += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+  // Orders section
+  maskedOrders.forEach((detailedOrder: DetailedOrder, index: number) => {
+    const { order, details } = detailedOrder;
+    const orderInfo = details?.tasks?.registration?.orderDetails;
+    const scheduling = details?.tasks?.scheduling;
+
+    markdown += `## Order #${index + 1}\n\n`;
+    markdown += `- **Order ID**: ${order.referenceNumber}\n`;
+    markdown += `- **Model**: ${order.modelCode}\n`;
+    markdown += `- **Status**: ${order.orderStatus}\n`;
+    markdown += `- **VIN**: ${order.vin || 'Not assigned'}\n`;
+
+    if (orderInfo?.reservationDate) {
+      markdown += `- **Reservation Date**: ${formatDate(orderInfo.reservationDate)}\n`;
     }
+    if (orderInfo?.orderBookedDate) {
+      markdown += `- **Order Booked**: ${formatDate(orderInfo.orderBookedDate)}\n`;
+    }
+    if (scheduling?.deliveryWindowDisplay) {
+      markdown += `- **Delivery Window**: ${scheduling.deliveryWindowDisplay}\n`;
+    }
+    if (orderInfo?.routingLocationLabel) {
+      markdown += `- **Location**: ${orderInfo.routingLocationLabel}\n`;
+    }
+
+    markdown += '\n';
+  });
+
+  // Timeline section
+  if (timeline.length > 0) {
+    markdown += '## Timeline\n\n';
+    timeline.slice(-10).forEach(event => { // Show last 10 events
+      const date = new Date(event.timestamp).toLocaleDateString();
+      const label = event.isNew ? `${event.label} (updated)` : event.label;
+      markdown += `- **${date}**: ${label}\n`;
+    });
+    markdown += '\n';
   }
 
-  return differences;
+  markdown += '---\n';
+  markdown += 'Generated by [Tesla Order Status Tracker](https://tesla-order-status.codext.de)\n';
+
+  return markdown;
 }
 
 // Main App Component
@@ -161,6 +439,21 @@ export default function App() {
   const [authCode, setAuthCode] = useState('');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // New state for TOST features
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showPrivacySettings, setShowPrivacySettings] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings>({
+    maskVIN: true,
+    maskOrderId: true,
+    vinMaskLength: 10,
+    orderIdMaskLength: 8,
+  });
+
   const authWindowRef = useRef<Window | null>(null);
   const clipboardIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -168,6 +461,22 @@ export default function App() {
   // Initialize from localStorage on mount
   useEffect(() => {
     const storedTokens = loadFromLocalStorage<TokenData>(STORAGE_KEYS.TOKENS);
+    const storedPrivacySettings = loadFromLocalStorage<PrivacySettings>(STORAGE_KEYS.PRIVACY_SETTINGS);
+    const storedHistory = getHistory();
+    const storedOrders = loadFromLocalStorage<DetailedOrder[]>(STORAGE_KEYS.ORDERS);
+
+    if (storedPrivacySettings) {
+      setPrivacySettings(storedPrivacySettings);
+    }
+
+    if (storedHistory) {
+      setHistory(storedHistory);
+    }
+
+    if (storedOrders && storedHistory) {
+      const timelineEvents = buildTimeline(storedOrders, storedHistory);
+      setTimeline(timelineEvents);
+    }
 
     if (storedTokens) {
       checkAndRefreshToken(storedTokens);
@@ -441,18 +750,38 @@ export default function App() {
       // Compare with previous orders
       const prevOrders = loadFromLocalStorage<DetailedOrder[]>(STORAGE_KEYS.ORDERS);
       if (prevOrders) {
-        const diffs: string[] = [];
+        const changes: ChangeOperation[] = [];
         for (let i = 0; i < Math.max(prevOrders.length, detailedOrders.length); i++) {
           if (i < prevOrders.length && i < detailedOrders.length) {
-            diffs.push(...compareDicts(prevOrders[i], detailedOrders[i], `Order ${i}.`));
+            changes.push(...compareDicts(prevOrders[i], detailedOrders[i], `Order ${i}.`));
           } else if (i >= detailedOrders.length) {
-            diffs.push(`- Removed order ${i}`);
+            changes.push({
+              key: `Order ${i}`,
+              operation: 'removed',
+              oldValue: prevOrders[i],
+            });
           } else {
-            diffs.push(`+ Added order ${i}`);
+            changes.push({
+              key: `Order ${i}`,
+              operation: 'added',
+              newValue: detailedOrders[i],
+            });
           }
         }
-        setDifferences(diffs);
-        if (diffs.length > 0) {
+
+        // Save history entry if there are changes
+        if (changes.length > 0) {
+          saveHistoryEntry(changes);
+          const updatedHistory = getHistory();
+          setHistory(updatedHistory);
+
+          // Rebuild timeline with new history
+          const timelineEvents = buildTimeline(detailedOrders, updatedHistory);
+          setTimeline(timelineEvents);
+
+          // Update differences for display
+          const diffStrings = formatChangeOperations(changes);
+          setDifferences(diffStrings);
           setShowComparison(true);
         }
       }
@@ -784,8 +1113,185 @@ export default function App() {
                     </span>
                   </label>
                 )}
+
+                {/* New TOST feature toggles */}
+                <div className="border-t border-gray-700 pt-4 mt-4">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3">Features</h4>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={showTimeline}
+                        onChange={(e) => setShowTimeline(e.target.checked)}
+                        className="w-5 h-5 rounded border-gray-700 bg-gray-800 text-red-600 focus:ring-red-900 focus:ring-offset-0"
+                      />
+                      <span className="text-gray-300 group-hover:text-white transition-colors">
+                        Show Timeline ({timeline.length} events)
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={showHistory}
+                        onChange={(e) => setShowHistory(e.target.checked)}
+                        className="w-5 h-5 rounded border-gray-700 bg-gray-800 text-red-600 focus:ring-red-900 focus:ring-offset-0"
+                      />
+                      <span className="text-gray-300 group-hover:text-white transition-colors">
+                        Show Change History ({history.length} snapshots)
+                      </span>
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowPrivacySettings(!showPrivacySettings)}
+                        className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all duration-200 border border-gray-700 hover:border-gray-600"
+                      >
+                        Privacy Settings
+                      </button>
+                      <button
+                        onClick={() => setShowShareModal(true)}
+                        className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-medium transition-all duration-200"
+                      >
+                        Share
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* Timeline */}
+            {showTimeline && timeline.length > 0 && (
+              <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
+                <h3 className="text-lg font-semibold text-blue-400 mb-4">Timeline</h3>
+                <div className="space-y-4">
+                  {timeline.map((event, index) => (
+                    <div key={index} className="flex items-start gap-4 border-l-2 border-blue-600 pl-4">
+                      <div className="flex-shrink-0 w-24 text-sm text-gray-500">
+                        {new Date(event.timestamp).toLocaleDateString()}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-white">
+                            {event.label}
+                            {event.isNew && (
+                              <span className="ml-2 text-xs px-2 py-0.5 bg-yellow-900/20 text-yellow-400 border border-yellow-900 rounded">
+                                updated
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-400 mt-1">
+                          {typeof event.value === 'string' ? event.value : JSON.stringify(event.value)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* History */}
+            {showHistory && history.length > 0 && (
+              <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
+                <h3 className="text-lg font-semibold text-purple-400 mb-4">Change History</h3>
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {history.slice().reverse().map((entry, index) => (
+                    <div key={index} className="border-b border-gray-800 pb-4 last:border-0">
+                      <div className="text-sm text-gray-500 mb-2">
+                        {new Date(entry.timestamp).toLocaleString()}
+                      </div>
+                      <div className="font-mono text-sm space-y-1">
+                        {entry.changes.map((change, changeIndex) => (
+                          <div
+                            key={changeIndex}
+                            className={`${
+                              change.operation === 'added' ? 'text-green-400' :
+                              change.operation === 'removed' ? 'text-red-400' :
+                              'text-yellow-400'
+                            }`}
+                          >
+                            {change.operation === 'added' && `+ ${change.key}: ${JSON.stringify(change.newValue)}`}
+                            {change.operation === 'removed' && `- ${change.key}`}
+                            {change.operation === 'changed' && `≠ ${change.key}: ${JSON.stringify(change.oldValue)} → ${JSON.stringify(change.newValue)}`}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Privacy Settings Panel */}
+            {showPrivacySettings && (
+              <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
+                <h3 className="text-lg font-semibold text-green-400 mb-4">Privacy Settings</h3>
+                <div className="space-y-4">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={privacySettings.maskVIN}
+                      onChange={(e) => {
+                        const newSettings = { ...privacySettings, maskVIN: e.target.checked };
+                        setPrivacySettings(newSettings);
+                        saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                      }}
+                      className="w-5 h-5 rounded border-gray-700 bg-gray-800 text-red-600 focus:ring-red-900 focus:ring-offset-0"
+                    />
+                    <span className="text-gray-300 group-hover:text-white transition-colors">Mask VIN</span>
+                  </label>
+                  {privacySettings.maskVIN && (
+                    <div className="ml-8 flex items-center gap-3">
+                      <label className="text-gray-400">Mask length:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="17"
+                        value={privacySettings.vinMaskLength}
+                        onChange={(e) => {
+                          const newSettings = { ...privacySettings, vinMaskLength: parseInt(e.target.value) || 0 };
+                          setPrivacySettings(newSettings);
+                          saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                        }}
+                        className="w-20 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-red-900 focus:outline-none focus:ring-1 focus:ring-red-900"
+                      />
+                      <span className="text-gray-500 text-sm">characters</span>
+                    </div>
+                  )}
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={privacySettings.maskOrderId}
+                      onChange={(e) => {
+                        const newSettings = { ...privacySettings, maskOrderId: e.target.checked };
+                        setPrivacySettings(newSettings);
+                        saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                      }}
+                      className="w-5 h-5 rounded border-gray-700 bg-gray-800 text-red-600 focus:ring-red-900 focus:ring-offset-0"
+                    />
+                    <span className="text-gray-300 group-hover:text-white transition-colors">Mask Order ID</span>
+                  </label>
+                  {privacySettings.maskOrderId && (
+                    <div className="ml-8 flex items-center gap-3">
+                      <label className="text-gray-400">Mask length:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={privacySettings.orderIdMaskLength}
+                        onChange={(e) => {
+                          const newSettings = { ...privacySettings, orderIdMaskLength: parseInt(e.target.value) || 0 };
+                          setPrivacySettings(newSettings);
+                          saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                        }}
+                        className="w-20 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-red-900 focus:outline-none focus:ring-1 focus:ring-red-900"
+                      />
+                      <span className="text-gray-500 text-sm">characters</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (
@@ -897,6 +1403,57 @@ export default function App() {
                   className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all duration-200 border border-gray-700"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold text-white mb-4">Share Order Status</h3>
+
+            <div className="space-y-4">
+              <div className="bg-blue-900/20 border border-blue-900/50 rounded-lg p-4">
+                <p className="text-blue-400 text-sm">
+                  Generate a shareable summary of your order status. Sensitive information will be masked according to your privacy settings.
+                </p>
+              </div>
+
+              {/* Preview */}
+              <div className="space-y-2">
+                <label className="text-gray-400 text-sm font-semibold">Preview:</label>
+                <div className="bg-black/50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                  <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono">
+                    {generateMarkdownSummary(orders, timeline, privacySettings)}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => {
+                    const markdown = generateMarkdownSummary(orders, timeline, privacySettings);
+                    try {
+                      await navigator.clipboard.writeText(markdown);
+                      alert('Summary copied to clipboard!');
+                    } catch (err) {
+                      console.error('Failed to copy:', err);
+                      alert('Failed to copy to clipboard. Please copy manually from the preview above.');
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium transition-all duration-200"
+                >
+                  Copy to Clipboard
+                </button>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all duration-200 border border-gray-700"
+                >
+                  Close
                 </button>
               </div>
             </div>
