@@ -242,8 +242,10 @@ async function handleCheckToken(req: Request): Promise<Response> {
 }
 
 // Bun server with route handling
+const port = process.env.PORT || 3456;
+
 Bun.serve({
-  port: 3000,
+  port: port,
   routes: {
     "/": indexHtml,
     "/api/auth/generate-url": {
@@ -304,4 +306,4 @@ Bun.serve({
   },
 });
 
-console.log('Tesla Order Status Web Server running on http://localhost:3000');
+console.log(`Tesla Order Status Web Server running on http://localhost:${port}`);

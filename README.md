@@ -34,7 +34,7 @@ bun start
 bun dev
 ```
 
-Then open your browser and navigate to: http://localhost:3000
+Then open your browser and navigate to: http://localhost:3456
 
 The web version features:
 - Modern, responsive UI with dark theme

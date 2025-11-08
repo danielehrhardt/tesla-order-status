@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bun install:*)"
+      "Bash(bun install:*)",
+      "Bash(bun:*)"
     ],
     "deny": [],
     "ask": []
