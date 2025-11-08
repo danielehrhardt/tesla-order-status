@@ -94,10 +94,10 @@ async function handleCallback(req: Request): Promise<Response> {
 
 async function handleExchangeCode(req: Request): Promise<Response> {
   const body = await req.json();
-  const { code, state } = body;
+  const { code, sessionId } = body;
 
-  // Retrieve session data
-  const session = authSessions.get(state);
+  // Retrieve session data using sessionId instead of state
+  const session = authSessions.get(sessionId);
   if (!session) {
     return new Response(JSON.stringify({ error: 'Invalid session' }), {
       status: 400,
@@ -124,7 +124,7 @@ async function handleExchangeCode(req: Request): Promise<Response> {
   });
 
   // Clean up session
-  authSessions.delete(state);
+  authSessions.delete(sessionId);
 
   if (!response.ok) {
     return new Response(JSON.stringify({ error: 'Token exchange failed' }), {
