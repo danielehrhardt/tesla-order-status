@@ -5,6 +5,9 @@ A TypeScript application for tracking your Tesla order status using the Tesla AP
 
 https://tesla-order-status.codext.de
 
+<img width="1061" height="978" alt="image" src="https://github.com/user-attachments/assets/f005db0c-d05a-4aba-9514-89657a331010" />
+
+
 ## Features
 
 - OAuth2 PKCE authentication with Tesla
