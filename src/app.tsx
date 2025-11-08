@@ -83,22 +83,62 @@ function formatDate(dateString?: string): string {
 function compareDicts(oldDict: any, newDict: any, path: string = ''): string[] {
   const differences: string[] = [];
 
+  // Helper function to check if values are effectively equal
+  const areValuesEqual = (val1: any, val2: any): boolean => {
+    // Strict equality check
+    if (val1 === val2) return true;
+
+    // Treat null and undefined as equal
+    if ((val1 === null || val1 === undefined) && (val2 === null || val2 === undefined)) {
+      return true;
+    }
+
+    // Handle arrays - compare by content
+    if (Array.isArray(val1) && Array.isArray(val2)) {
+      return JSON.stringify(val1) === JSON.stringify(val2);
+    }
+
+    // Handle objects - compare by content (for leaf nodes)
+    if (typeof val1 === 'object' && val1 !== null && typeof val2 === 'object' && val2 !== null) {
+      // Use JSON comparison for simple objects
+      try {
+        return JSON.stringify(val1) === JSON.stringify(val2);
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
+  };
+
+  // Helper to format values for display
+  const formatValue = (val: any): string => {
+    if (val === null) return 'null';
+    if (val === undefined) return 'undefined';
+    if (Array.isArray(val)) return JSON.stringify(val);
+    if (typeof val === 'object') return JSON.stringify(val);
+    return String(val);
+  };
+
   for (const key in oldDict) {
     if (!(key in newDict)) {
       differences.push(`- Removed key '${path}${key}'`);
     } else if (typeof oldDict[key] === 'object' && oldDict[key] !== null &&
                typeof newDict[key] === 'object' && newDict[key] !== null &&
                !Array.isArray(oldDict[key]) && !Array.isArray(newDict[key])) {
+      // Recursively compare nested objects
       differences.push(...compareDicts(oldDict[key], newDict[key], `${path}${key}.`));
-    } else if (oldDict[key] !== newDict[key]) {
-      differences.push(`- ${path}${key}: ${oldDict[key]}`);
-      differences.push(`+ ${path}${key}: ${newDict[key]}`);
+    } else if (!areValuesEqual(oldDict[key], newDict[key])) {
+      // Only report actual differences
+      differences.push(`- ${path}${key}: ${formatValue(oldDict[key])}`);
+      differences.push(`+ ${path}${key}: ${formatValue(newDict[key])}`);
     }
   }
 
   for (const key in newDict) {
     if (!(key in oldDict)) {
-      differences.push(`+ Added key '${path}${key}': ${newDict[key]}`);
+      const formattedValue = formatValue(newDict[key]);
+      differences.push(`+ Added key '${path}${key}': ${formattedValue}`);
     }
   }
 
@@ -208,12 +248,16 @@ export default function App() {
           setTokens(updatedTokens);
           saveToLocalStorage(STORAGE_KEYS.TOKENS, updatedTokens);
           setIsAuthenticated(true);
+          // Automatically fetch orders after successful token refresh
+          await fetchOrdersWithToken(updatedTokens);
         } else {
           handleLogout();
         }
       } else if (result.valid) {
         setTokens(tokenData);
         setIsAuthenticated(true);
+        // Automatically fetch orders after successful token validation
+        await fetchOrdersWithToken(tokenData);
       } else {
         handleLogout();
       }
