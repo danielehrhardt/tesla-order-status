@@ -681,9 +681,14 @@ export default function App() {
               >
                 {loading ? 'Starting...' : 'Start Authentication'}
               </button>
-              <p className="text-xs text-gray-500 mt-4">
-                A popup window will open for Tesla login
-              </p>
+              <div className="mt-4 space-y-2">
+                <p className="text-xs text-gray-500">
+                  A popup window will open for Tesla login.
+                </p>
+                <p className="text-xs text-amber-400">
+                  iPhone users: Disable Safari&apos;s pop-up blocker (Settings → Safari → enable Allow Pop-ups) so the login window can open.
+                </p>
+              </div>
               {error && (
                 <div className="mt-4 p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm">
                   {error}

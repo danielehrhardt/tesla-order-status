@@ -50,6 +50,8 @@ The web version features:
 - Auto-refresh capabilities
 - No server-side storage - everything stays in your browser
 
+> **Note for iPhone users:** Please disable Safari's pop-up blocker or the Tesla login window will be blocked. On your iPhone, open **Settings → Safari** and enable **Allow Pop-ups**.
+
 ### CLI Version
 
 Run the CLI script:
