@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(bun install:*)",
-      "Bash(bun:*)"
+      "Bash(bun:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

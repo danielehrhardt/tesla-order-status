@@ -1,15 +1,29 @@
-import { getTeslaStoreLabel } from './tesla-stores';
+import { getTeslaStoreLabel } from './src/lib/tesla-stores';
 import * as crypto from 'crypto';
-import indexHtml from "./index.html";
+import indexHtml from "./src/pages/index.html";
+import callbackHtml from "./src/pages/callback.html";
 
 // Tesla API constants
 const CLIENT_ID = 'ownerapi';
-const REDIRECT_URI = 'https://auth.tesla.com/void/callback';
+const REDIRECT_URI = process.env.REDIRECT_URI || 'http://localhost:3456/callback';
 const AUTH_URL = 'https://auth.tesla.com/oauth2/v3/authorize';
 const TOKEN_URL = 'https://auth.tesla.com/oauth2/v3/token';
 const SCOPE = 'openid email offline_access';
 const CODE_CHALLENGE_METHOD = 'S256';
 const APP_VERSION = '9.99.9-9999';
+
+// Store auth sessions temporarily
+const authSessions = new Map<string, { codeVerifier: string; codeChallenge: string; timestamp: number }>();
+
+// Clean up old sessions every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [sessionId, session] of authSessions) {
+    if (now - session.timestamp > 10 * 60 * 1000) { // 10 minutes
+      authSessions.delete(sessionId);
+    }
+  }
+}, 5 * 60 * 1000);
 
 // Utility functions
 function generateCodeVerifierAndChallenge(): { codeVerifier: string; codeChallenge: string } {
@@ -40,7 +54,15 @@ function isTokenValid(accessToken: string): boolean {
 // API Handlers
 async function handleGenerateAuthUrl(req: Request): Promise<Response> {
   const { codeVerifier, codeChallenge } = generateCodeVerifierAndChallenge();
-  const state = crypto.randomBytes(16).toString('hex');
+  const sessionId = crypto.randomBytes(16).toString('hex');
+  const state = sessionId; // Use sessionId as state for security
+
+  // Store session data
+  authSessions.set(sessionId, {
+    codeVerifier,
+    codeChallenge,
+    timestamp: Date.now()
+  });
 
   const authParams = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -56,17 +78,34 @@ async function handleGenerateAuthUrl(req: Request): Promise<Response> {
 
   return new Response(JSON.stringify({
     authUrl,
-    codeVerifier,
-    codeChallenge,
-    state
+    sessionId,
+    redirectUri: REDIRECT_URI
   }), {
     headers: { 'Content-Type': 'application/json' }
   });
 }
 
+async function handleCallback(req: Request): Promise<Response> {
+  // Return the callback HTML page that will handle the OAuth callback
+  return new Response(await Bun.file("./src/pages/callback.html").text(), {
+    headers: { 'Content-Type': 'text/html' }
+  });
+}
+
 async function handleExchangeCode(req: Request): Promise<Response> {
   const body = await req.json();
-  const { code, codeVerifier } = body;
+  const { code, state } = body;
+
+  // Retrieve session data
+  const session = authSessions.get(state);
+  if (!session) {
+    return new Response(JSON.stringify({ error: 'Invalid session' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  const { codeVerifier } = session;
 
   const tokenData = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -83,6 +122,9 @@ async function handleExchangeCode(req: Request): Promise<Response> {
     },
     body: tokenData.toString(),
   });
+
+  // Clean up session
+  authSessions.delete(state);
 
   if (!response.ok) {
     return new Response(JSON.stringify({ error: 'Token exchange failed' }), {
@@ -248,6 +290,7 @@ Bun.serve({
   port: port,
   routes: {
     "/": indexHtml,
+    "/callback": callbackHtml,
     "/api/auth/generate-url": {
       GET: handleGenerateAuthUrl,
     },
@@ -277,6 +320,11 @@ Bun.serve({
   fetch(req: Request) {
     const url = new URL(req.url);
     const path = url.pathname;
+
+    // Handle callback route
+    if (path === '/callback') {
+      return handleCallback(req);
+    }
 
     // Handle API routes
     if (path === '/api/auth/generate-url' && req.method === 'GET') {

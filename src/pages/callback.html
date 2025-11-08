@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tesla Auth Callback - Processing...</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body class="bg-black min-h-screen flex items-center justify-center">
+    <div class="max-w-md mx-auto p-8 text-center">
+        <div class="mb-6">
+            <svg class="animate-spin h-12 w-12 mx-auto text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+        <h1 class="text-white text-2xl font-semibold mb-2">Processing Authentication</h1>
+        <p class="text-gray-400" id="status">Exchanging authorization code for tokens...</p>
+        <div id="error" class="mt-4 text-red-400 hidden"></div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const error = urlParams.get('error');
+
+        if (error) {
+            document.getElementById('status').textContent = 'Authentication failed';
+            document.getElementById('error').textContent = error;
+            document.getElementById('error').classList.remove('hidden');
+            // Redirect after delay
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+        } else if (code && state) {
+            // Exchange code for tokens
+            fetch('/api/auth/exchange-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ code, state }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Save tokens to localStorage
+                const tokensWithTime = {
+                    ...data,
+                    created_at: Date.now(),
+                };
+                localStorage.setItem('tesla_tokens', JSON.stringify(tokensWithTime));
+
+                // Set authentication flag
+                localStorage.setItem('tesla_auth_success', 'true');
+
+                document.getElementById('status').textContent = 'Authentication successful! Redirecting...';
+
+                // Redirect to main page
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            })
+            .catch(err => {
+                document.getElementById('status').textContent = 'Authentication failed';
+                document.getElementById('error').textContent = err.message;
+                document.getElementById('error').classList.remove('hidden');
+
+                // Redirect after delay
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 3000);
+            });
+        } else {
+            document.getElementById('status').textContent = 'Invalid callback parameters';
+            document.getElementById('error').textContent = 'Missing authorization code or state';
+            document.getElementById('error').classList.remove('hidden');
+
+            // Redirect after delay
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
