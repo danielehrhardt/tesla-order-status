@@ -5,7 +5,7 @@ import callbackHtml from "./src/pages/callback.html";
 
 // Tesla API constants
 const CLIENT_ID = 'ownerapi';
-const REDIRECT_URI = process.env.REDIRECT_URI || 'http://localhost:3456/callback';
+const REDIRECT_URI = 'https://auth.tesla.com/void/callback'; // Tesla's fixed redirect URI
 const AUTH_URL = 'https://auth.tesla.com/oauth2/v3/authorize';
 const TOKEN_URL = 'https://auth.tesla.com/oauth2/v3/token';
 const SCOPE = 'openid email offline_access';
