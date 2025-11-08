@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import './styles/main.css';
 
 // Type definitions
 interface TokenData {
