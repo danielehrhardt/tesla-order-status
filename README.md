@@ -126,4 +126,10 @@ When run multiple times, the script shows:
 
 ---
 
+## Credits
+
+This project is a fork of the original [Tesla Order Status](https://github.com/niklaswa/tesla-order-status) by [niklaswa](https://github.com/niklaswa).
+
+---
+
 This project was created using `bun init` in bun v1.2.21. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

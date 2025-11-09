@@ -1468,6 +1468,17 @@ export default function App() {
           <p className="text-xs text-gray-600 mt-2">
             Your authentication tokens and order data are stored locally in your browser
           </p>
+          <p className="text-xs text-gray-600 mt-2">
+            Forked from{' '}
+            <a
+              href="https://github.com/niklaswa/tesla-order-status"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 underline"
+            >
+              niklaswa/tesla-order-status
+            </a>
+          </p>
         </div>
       </footer>
     </div>
