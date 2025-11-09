@@ -47,6 +47,14 @@ interface DetailedOrder {
   details: OrderDetails;
 }
 
+// Image viewer types
+interface VehicleImage {
+  url: string;
+  label: string;
+}
+
+type ViewAngle = 'STUD_3QTR' | 'STUD_SIDE' | 'STUD_REAR' | 'STUD_SEAT' | 'STUD_WHEEL';
+
 // History and Timeline types
 interface ChangeOperation {
   key: string;
@@ -371,6 +379,28 @@ function applyPrivacyMask(data: any, settings: PrivacySettings): any {
   return masked;
 }
 
+// Tesla Compositor image generation
+function generateVehicleImages(modelCode: string, optionCodes?: string): VehicleImage[] {
+  const angles: { angle: ViewAngle; label: string }[] = [
+    { angle: 'STUD_3QTR', label: 'Front 3/4' },
+    { angle: 'STUD_SIDE', label: 'Side View' },
+    { angle: 'STUD_REAR', label: 'Rear 3/4' },
+    { angle: 'STUD_SEAT', label: 'Interior' },
+    { angle: 'STUD_WHEEL', label: 'Wheel Detail' },
+  ];
+
+  // Parse model code to get base model
+  const model = modelCode.substring(0, 2); // e.g., "m3", "my", "ms", "mx"
+
+  // Default options if not provided
+  const options = optionCodes || 'PPSW,$MT320,$PPSB,$DV4W,$IBB1';
+
+  return angles.map(({ angle, label }) => ({
+    url: `https://static-assets.tesla.com/configurator/compositor?&options=${options}&view=${angle}&model=${model}&size=1920&bkba_opt=2&crop=0,0,0,0&`,
+    label,
+  }));
+}
+
 // Share/Export functions
 function generateMarkdownSummary(orders: DetailedOrder[], timeline: TimelineEvent[], settings: PrivacySettings): string {
   const maskedOrders = applyPrivacyMask(orders, settings);
@@ -453,6 +483,10 @@ export default function App() {
     vinMaskLength: 10,
     orderIdMaskLength: 8,
   });
+
+  // Image viewer state
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Record<string, string>>({});
 
   const authWindowRef = useRef<Window | null>(null);
   const clipboardIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -819,6 +853,91 @@ export default function App() {
     }
   };
 
+  // Image Carousel Component
+  const ImageCarousel = ({ images, orderId }: { images: VehicleImage[]; orderId: string }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    const nextImage = () => {
+      setCurrentIndex((prev) => (prev + 1) % images.length);
+    };
+
+    const prevImage = () => {
+      setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+    };
+
+    return (
+      <div className="relative group">
+        <div className="aspect-video bg-gray-950 rounded-lg overflow-hidden cursor-pointer"
+             onClick={() => setSelectedImage(images[currentIndex].url)}>
+          <img
+            src={images[currentIndex].url}
+            alt={images[currentIndex].label}
+            className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+            onError={(e) => {
+              // Fallback to a placeholder if image fails to load
+              (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="450"%3E%3Crect fill="%23111" width="800" height="450"/%3E%3Ctext fill="%23666" font-family="sans-serif" font-size="24" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3ENo Image Available%3C/text%3E%3C/svg%3E';
+            }}
+          />
+        </div>
+
+        {/* Navigation Buttons */}
+        {images.length > 1 && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); prevImage(); }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Previous image"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); nextImage(); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Next image"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </>
+        )}
+
+        {/* Image Indicator Dots */}
+        {images.length > 1 && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+            {images.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={(e) => { e.stopPropagation(); setCurrentIndex(idx); }}
+                className={`w-2 h-2 rounded-full transition-all ${
+                  idx === currentIndex ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/75'
+                }`}
+                aria-label={`View ${images[idx].label}`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Image Label */}
+        <div className="absolute top-3 left-3 bg-black/60 px-3 py-1 rounded-full text-sm text-white">
+          {images[currentIndex].label}
+        </div>
+
+        {/* Zoom Hint */}
+        <div className="absolute top-3 right-3 bg-black/60 px-3 py-1 rounded-full text-sm text-white opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+            </svg>
+            Click to zoom
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   const renderOrderCard = (detailedOrder: DetailedOrder, index: number) => {
     const { order, details } = detailedOrder;
     const scheduling = details?.tasks?.scheduling || {};
@@ -832,79 +951,168 @@ export default function App() {
       delivered: 'bg-blue-900/20 text-blue-400 border-blue-900',
     };
 
+    // Generate vehicle images
+    const vehicleImages = generateVehicleImages(order.modelCode);
+
+    // Get or set active tab for this order
+    const currentTab = activeTab[order.referenceNumber] || 'overview';
+    const setTab = (tab: string) => {
+      setActiveTab(prev => ({ ...prev, [order.referenceNumber]: tab }));
+    };
+
     return (
-      <div key={order.referenceNumber} className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-900/20 hover:border-red-900/30 transition-all duration-300">
-        <div className="flex justify-between items-center mb-4">
+      <div key={order.referenceNumber} className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl overflow-hidden hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-900/20 hover:border-red-900/30 transition-all duration-300">
+        {/* Header */}
+        <div className="flex justify-between items-center p-6 pb-0">
           <h3 className="text-lg font-semibold text-white">Order #{index + 1}</h3>
           <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusColors[order.orderStatus?.toLowerCase()] || 'bg-gray-900/20 text-gray-400 border-gray-800'}`}>
             {order.orderStatus}
           </span>
         </div>
 
-        <div className="space-y-6">
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Order Details</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">Order ID</span>
-                <p className="text-sm font-medium text-white">{order.referenceNumber}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">Model</span>
-                <p className="text-sm font-medium text-white">{order.modelCode}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">VIN</span>
-                <p className="text-sm font-medium text-white">{order.vin || 'Not assigned'}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">Odometer</span>
-                <p className="text-sm font-medium text-white">
-                  {orderInfo.vehicleOdometer || 'N/A'} {orderInfo.vehicleOdometerType || ''}
-                </p>
-              </div>
-            </div>
-          </div>
+        {/* Image Carousel */}
+        <div className="p-6 pb-4">
+          <ImageCarousel images={vehicleImages} orderId={order.referenceNumber} />
+        </div>
 
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Dates</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">Reservation</span>
-                <p className="text-sm font-medium text-white">{formatDate(orderInfo.reservationDate)}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">Order Booked</span>
-                <p className="text-sm font-medium text-white">{formatDate(orderInfo.orderBookedDate)}</p>
-              </div>
-            </div>
+        {/* Tabs */}
+        <div className="border-b border-gray-800 px-6">
+          <div className="flex gap-1 -mb-px overflow-x-auto">
+            {[
+              { id: 'overview', label: 'Overview', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+              { id: 'details', label: 'Details', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+              { id: 'delivery', label: 'Delivery', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  currentTab === tab.id
+                    ? 'border-red-600 text-white'
+                    : 'border-transparent text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={tab.icon} />
+                </svg>
+                {tab.label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Delivery Information</h4>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">Routing Location</span>
-                <p className="text-sm font-medium text-white">
-                  {orderInfo.routingLocationLabel || orderInfo.vehicleRoutingLocation || 'N/A'}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+        {/* Tab Content */}
+        <div className="p-6">
+          {currentTab === 'overview' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
+                  <span className="text-xs text-gray-500">Model</span>
+                  <p className="text-lg font-semibold text-white">{order.modelCode}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs text-gray-500">VIN</span>
+                  <p className="text-lg font-semibold text-white">{order.vin || 'Not assigned'}</p>
+                </div>
+              </div>
+              <div className="bg-gray-950/50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Order ID</span>
+                  <span className="text-sm font-mono text-white">{order.referenceNumber}</span>
+                </div>
+                {orderInfo.reservationDate && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-400">Reservation Date</span>
+                    <span className="text-sm text-white">{formatDate(orderInfo.reservationDate)}</span>
+                  </div>
+                )}
+                {orderInfo.orderBookedDate && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-400">Order Booked</span>
+                    <span className="text-sm text-white">{formatDate(orderInfo.orderBookedDate)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {currentTab === 'details' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-950/50 rounded-lg p-4 space-y-1">
+                  <span className="text-xs text-gray-500">Order ID</span>
+                  <p className="text-sm font-mono text-white break-all">{order.referenceNumber}</p>
+                </div>
+                <div className="bg-gray-950/50 rounded-lg p-4 space-y-1">
+                  <span className="text-xs text-gray-500">Model</span>
+                  <p className="text-sm font-medium text-white">{order.modelCode}</p>
+                </div>
+                <div className="bg-gray-950/50 rounded-lg p-4 space-y-1">
+                  <span className="text-xs text-gray-500">VIN</span>
+                  <p className="text-sm font-medium text-white">{order.vin || 'Not assigned'}</p>
+                </div>
+                <div className="bg-gray-950/50 rounded-lg p-4 space-y-1">
+                  <span className="text-xs text-gray-500">Odometer</span>
+                  <p className="text-sm font-medium text-white">
+                    {orderInfo.vehicleOdometer || 'N/A'} {orderInfo.vehicleOdometerType || ''}
+                  </p>
+                </div>
+              </div>
+              <div className="bg-gray-950/50 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-400 mb-3">Dates</h4>
+                <div className="space-y-2">
+                  {orderInfo.reservationDate && (
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Reservation</span>
+                      <span className="text-sm text-white">{formatDate(orderInfo.reservationDate)}</span>
+                    </div>
+                  )}
+                  {orderInfo.orderBookedDate && (
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Order Booked</span>
+                      <span className="text-sm text-white">{formatDate(orderInfo.orderBookedDate)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentTab === 'delivery' && (
+            <div className="space-y-4">
+              <div className="bg-gray-950/50 rounded-lg p-4 space-y-3">
+                <div className="space-y-1">
+                  <span className="text-xs text-gray-500">Routing Location</span>
+                  <p className="text-sm font-medium text-white">
+                    {orderInfo.routingLocationLabel || orderInfo.vehicleRoutingLocation || 'N/A'}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-950/50 rounded-lg p-4 space-y-1">
                   <span className="text-xs text-gray-500">Delivery Window</span>
                   <p className="text-sm font-medium text-white">{scheduling.deliveryWindowDisplay || 'Not scheduled'}</p>
                 </div>
-                <div className="space-y-1">
+                <div className="bg-gray-950/50 rounded-lg p-4 space-y-1">
                   <span className="text-xs text-gray-500">ETA to Center</span>
                   <p className="text-sm font-medium text-white">{finalPaymentData.etaToDeliveryCenter || 'N/A'}</p>
                 </div>
               </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-500">Appointment</span>
-                <p className="text-sm font-medium text-white">{scheduling.apptDateTimeAddressStr || 'Not scheduled'}</p>
-              </div>
+              {scheduling.apptDateTimeAddressStr && (
+                <div className="bg-gradient-to-br from-red-900/20 to-red-900/10 border border-red-900/50 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <div className="space-y-1">
+                      <span className="text-xs text-red-400 font-semibold uppercase tracking-wider">Appointment Scheduled</span>
+                      <p className="text-sm text-white">{scheduling.apptDateTimeAddressStr}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -1457,6 +1665,37 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Zoom Modal */}
+      {selectedImage && (
+        <div
+          className="fixed inset-0 bg-black/95 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <button
+            onClick={() => setSelectedImage(null)}
+            className="absolute top-4 right-4 bg-gray-900/90 hover:bg-gray-800 text-white p-3 rounded-full transition-colors z-10"
+            aria-label="Close image viewer"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="max-w-7xl max-h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={selectedImage}
+              alt="Vehicle detail"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="450"%3E%3Crect fill="%23111" width="800" height="450"/%3E%3Ctext fill="%23666" font-family="sans-serif" font-size="24" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3EImage not available%3C/text%3E%3C/svg%3E';
+              }}
+            />
+          </div>
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 px-4 py-2 rounded-full text-sm text-gray-300">
+            Click anywhere to close
           </div>
         </div>
       )}
