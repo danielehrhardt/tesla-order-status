@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createRoot } from "react-dom/client";
 
 // Type definitions
 interface TokenData {
@@ -50,7 +50,7 @@ interface DetailedOrder {
 // History and Timeline types
 interface ChangeOperation {
   key: string;
-  operation: 'added' | 'removed' | 'changed';
+  operation: "added" | "removed" | "changed";
   oldValue?: any;
   newValue?: any;
 }
@@ -78,12 +78,12 @@ interface PrivacySettings {
 
 // Storage keys
 const STORAGE_KEYS = {
-  TOKENS: 'tesla_tokens',
-  ORDERS: 'tesla_orders',
-  SESSION_ID: 'tesla_session_id',
-  HISTORY: 'tesla_history',
-  TIMELINE: 'tesla_timeline',
-  PRIVACY_SETTINGS: 'tesla_privacy_settings',
+  TOKENS: "tesla_tokens",
+  ORDERS: "tesla_orders",
+  SESSION_ID: "tesla_session_id",
+  HISTORY: "tesla_history",
+  TIMELINE: "tesla_timeline",
+  PRIVACY_SETTINGS: "tesla_privacy_settings",
 };
 
 // Utility functions
@@ -101,12 +101,12 @@ function removeFromLocalStorage(key: string): void {
 }
 
 function formatDate(dateString?: string): string {
-  if (!dateString) return 'N/A';
+  if (!dateString) return "N/A";
   try {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   } catch {
     return dateString;
@@ -114,19 +114,31 @@ function formatDate(dateString?: string): string {
 }
 
 // Enhanced comparison function that returns structured change operations
-function compareDicts(oldDict: any, newDict: any, path: string = ''): ChangeOperation[] {
+function compareDicts(
+  oldDict: any,
+  newDict: any,
+  path: string = ""
+): ChangeOperation[] {
   const changes: ChangeOperation[] = [];
 
   // Helper function to check if values are effectively equal
   const areValuesEqual = (val1: any, val2: any): boolean => {
     if (val1 === val2) return true;
-    if ((val1 === null || val1 === undefined) && (val2 === null || val2 === undefined)) {
+    if (
+      (val1 === null || val1 === undefined) &&
+      (val2 === null || val2 === undefined)
+    ) {
       return true;
     }
     if (Array.isArray(val1) && Array.isArray(val2)) {
       return JSON.stringify(val1) === JSON.stringify(val2);
     }
-    if (typeof val1 === 'object' && val1 !== null && typeof val2 === 'object' && val2 !== null) {
+    if (
+      typeof val1 === "object" &&
+      val1 !== null &&
+      typeof val2 === "object" &&
+      val2 !== null
+    ) {
       try {
         return JSON.stringify(val1) === JSON.stringify(val2);
       } catch {
@@ -140,18 +152,25 @@ function compareDicts(oldDict: any, newDict: any, path: string = ''): ChangeOper
     if (!(key in newDict)) {
       changes.push({
         key: `${path}${key}`,
-        operation: 'removed',
+        operation: "removed",
         oldValue: oldDict[key],
       });
-    } else if (typeof oldDict[key] === 'object' && oldDict[key] !== null &&
-               typeof newDict[key] === 'object' && newDict[key] !== null &&
-               !Array.isArray(oldDict[key]) && !Array.isArray(newDict[key])) {
+    } else if (
+      typeof oldDict[key] === "object" &&
+      oldDict[key] !== null &&
+      typeof newDict[key] === "object" &&
+      newDict[key] !== null &&
+      !Array.isArray(oldDict[key]) &&
+      !Array.isArray(newDict[key])
+    ) {
       // Recursively compare nested objects
-      changes.push(...compareDicts(oldDict[key], newDict[key], `${path}${key}.`));
+      changes.push(
+        ...compareDicts(oldDict[key], newDict[key], `${path}${key}.`)
+      );
     } else if (!areValuesEqual(oldDict[key], newDict[key])) {
       changes.push({
         key: `${path}${key}`,
-        operation: 'changed',
+        operation: "changed",
         oldValue: oldDict[key],
         newValue: newDict[key],
       });
@@ -162,7 +181,7 @@ function compareDicts(oldDict: any, newDict: any, path: string = ''): ChangeOper
     if (!(key in oldDict)) {
       changes.push({
         key: `${path}${key}`,
-        operation: 'added',
+        operation: "added",
         newValue: newDict[key],
       });
     }
@@ -174,23 +193,25 @@ function compareDicts(oldDict: any, newDict: any, path: string = ''): ChangeOper
 // Convert change operations to display strings (for backward compatibility)
 function formatChangeOperations(changes: ChangeOperation[]): string[] {
   const formatValue = (val: any): string => {
-    if (val === null) return 'null';
-    if (val === undefined) return 'undefined';
+    if (val === null) return "null";
+    if (val === undefined) return "undefined";
     if (Array.isArray(val)) return JSON.stringify(val);
-    if (typeof val === 'object') return JSON.stringify(val);
+    if (typeof val === "object") return JSON.stringify(val);
     return String(val);
   };
 
-  return changes.map(change => {
+  return changes.map((change) => {
     switch (change.operation) {
-      case 'added':
+      case "added":
         return `+ Added key '${change.key}': ${formatValue(change.newValue)}`;
-      case 'removed':
+      case "removed":
         return `- Removed key '${change.key}'`;
-      case 'changed':
-        return `≠ ${change.key}: ${formatValue(change.oldValue)} → ${formatValue(change.newValue)}`;
+      case "changed":
+        return `≠ ${change.key}: ${formatValue(
+          change.oldValue
+        )} → ${formatValue(change.newValue)}`;
       default:
-        return '';
+        return "";
     }
   });
 }
@@ -199,7 +220,8 @@ function formatChangeOperations(changes: ChangeOperation[]): string[] {
 function saveHistoryEntry(changes: ChangeOperation[]): void {
   if (changes.length === 0) return;
 
-  const history = loadFromLocalStorage<HistoryEntry[]>(STORAGE_KEYS.HISTORY) || [];
+  const history =
+    loadFromLocalStorage<HistoryEntry[]>(STORAGE_KEYS.HISTORY) || [];
   history.push({
     timestamp: Date.now(),
     changes,
@@ -212,7 +234,10 @@ function getHistory(): HistoryEntry[] {
 }
 
 // Timeline management functions
-function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): TimelineEvent[] {
+function buildTimeline(
+  orders: DetailedOrder[],
+  history: HistoryEntry[]
+): TimelineEvent[] {
   const events: TimelineEvent[] = [];
   const seenKeys = new Set<string>();
 
@@ -229,7 +254,7 @@ function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): Timeli
         timestamp: new Date(orderInfo.reservationDate).getTime(),
         key,
         value: orderInfo.reservationDate,
-        label: 'Reservation',
+        label: "Reservation",
       });
       seenKeys.add(key);
     }
@@ -241,7 +266,7 @@ function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): Timeli
         timestamp: new Date(orderInfo.orderBookedDate).getTime(),
         key,
         value: orderInfo.orderBookedDate,
-        label: 'Order Booked',
+        label: "Order Booked",
       });
       seenKeys.add(key);
     }
@@ -254,7 +279,7 @@ function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): Timeli
           timestamp: Date.now(),
           key,
           value: detailedOrder.order.vin,
-          label: 'VIN Assigned',
+          label: "VIN Assigned",
         });
         seenKeys.add(key);
       }
@@ -268,7 +293,7 @@ function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): Timeli
           timestamp: Date.now(),
           key,
           value: scheduling.deliveryWindowDisplay,
-          label: 'Delivery Window',
+          label: "Delivery Window",
         });
         seenKeys.add(key);
       }
@@ -281,8 +306,10 @@ function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): Timeli
         events.push({
           timestamp: Date.now(),
           key,
-          value: `${orderInfo.vehicleOdometer} ${orderInfo.vehicleOdometerType || ''}`,
-          label: 'Car Built',
+          value: `${orderInfo.vehicleOdometer} ${
+            orderInfo.vehicleOdometerType || ""
+          }`,
+          label: "Car Built",
         });
         seenKeys.add(key);
       }
@@ -290,19 +317,20 @@ function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): Timeli
   });
 
   // Add events from history
-  history.forEach(entry => {
-    entry.changes.forEach(change => {
+  history.forEach((entry) => {
+    entry.changes.forEach((change) => {
       // Check if this is a significant event worth adding to timeline
       const lowerKey = change.key.toLowerCase();
 
-      if (lowerKey.includes('vin') ||
-          lowerKey.includes('deliverywindow') ||
-          lowerKey.includes('orderstatus') ||
-          lowerKey.includes('vehicleodometer') ||
-          lowerKey.includes('appointment')) {
-
+      if (
+        lowerKey.includes("vin") ||
+        lowerKey.includes("deliverywindow") ||
+        lowerKey.includes("orderstatus") ||
+        lowerKey.includes("vehicleodometer") ||
+        lowerKey.includes("appointment")
+      ) {
         const eventKey = `${change.key}.${change.operation}`;
-        const existingEvent = events.find(e => e.key === change.key);
+        const existingEvent = events.find((e) => e.key === change.key);
 
         events.push({
           timestamp: entry.timestamp,
@@ -322,26 +350,26 @@ function buildTimeline(orders: DetailedOrder[], history: HistoryEntry[]): Timeli
 function translateKeyToLabel(key: string): string {
   const lowerKey = key.toLowerCase();
 
-  if (lowerKey.includes('vin')) return 'VIN';
-  if (lowerKey.includes('deliverywindow')) return 'Delivery Window';
-  if (lowerKey.includes('orderstatus')) return 'Order Status';
-  if (lowerKey.includes('vehicleodometer')) return 'Odometer';
-  if (lowerKey.includes('appointment')) return 'Appointment';
-  if (lowerKey.includes('reservation')) return 'Reservation';
-  if (lowerKey.includes('orderbooked')) return 'Order Booked';
-  if (lowerKey.includes('etatodeliverycenter')) return 'ETA to Center';
+  if (lowerKey.includes("vin")) return "VIN";
+  if (lowerKey.includes("deliverywindow")) return "Delivery Window";
+  if (lowerKey.includes("orderstatus")) return "Order Status";
+  if (lowerKey.includes("vehicleodometer")) return "Odometer";
+  if (lowerKey.includes("appointment")) return "Appointment";
+  if (lowerKey.includes("reservation")) return "Reservation";
+  if (lowerKey.includes("orderbooked")) return "Order Booked";
+  if (lowerKey.includes("etatodeliverycenter")) return "ETA to Center";
 
   // Default: capitalize and remove path prefixes
-  const parts = key.split('.');
+  const parts = key.split(".");
   const lastPart = parts[parts.length - 1];
   return lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
 }
 
 // Privacy/masking functions
 function maskString(str: string, maskLength: number): string {
-  if (!str || maskLength >= str.length) return '█'.repeat(str.length);
+  if (!str || maskLength >= str.length) return "█".repeat(str.length);
   const visibleChars = Math.max(0, str.length - maskLength);
-  return '█'.repeat(maskLength) + str.slice(visibleChars);
+  return "█".repeat(maskLength) + str.slice(visibleChars);
 }
 
 function applyPrivacyMask(data: any, settings: PrivacySettings): any {
@@ -349,18 +377,21 @@ function applyPrivacyMask(data: any, settings: PrivacySettings): any {
 
   const masked = JSON.parse(JSON.stringify(data)); // Deep clone
 
-  function maskObject(obj: any, path: string = ''): void {
+  function maskObject(obj: any, path: string = ""): void {
     for (const key in obj) {
       const currentPath = path ? `${path}.${key}` : key;
 
-      if (typeof obj[key] === 'object' && obj[key] !== null) {
+      if (typeof obj[key] === "object" && obj[key] !== null) {
         maskObject(obj[key], currentPath);
-      } else if (typeof obj[key] === 'string') {
+      } else if (typeof obj[key] === "string") {
         const lowerKey = key.toLowerCase();
 
-        if (settings.maskVIN && lowerKey === 'vin') {
+        if (settings.maskVIN && lowerKey === "vin") {
           obj[key] = maskString(obj[key], settings.vinMaskLength);
-        } else if (settings.maskOrderId && (lowerKey === 'referencenumber' || lowerKey === 'orderid')) {
+        } else if (
+          settings.maskOrderId &&
+          (lowerKey === "referencenumber" || lowerKey === "orderid")
+        ) {
           obj[key] = maskString(obj[key], settings.orderIdMaskLength);
         }
       }
@@ -372,10 +403,14 @@ function applyPrivacyMask(data: any, settings: PrivacySettings): any {
 }
 
 // Share/Export functions
-function generateMarkdownSummary(orders: DetailedOrder[], timeline: TimelineEvent[], settings: PrivacySettings): string {
+function generateMarkdownSummary(
+  orders: DetailedOrder[],
+  timeline: TimelineEvent[],
+  settings: PrivacySettings
+): string {
   const maskedOrders = applyPrivacyMask(orders, settings);
 
-  let markdown = '# Tesla Order Status Summary\n\n';
+  let markdown = "# Tesla Online Order Status Summary\n\n";
   markdown += `Generated: ${new Date().toLocaleString()}\n\n`;
 
   // Orders section
@@ -388,13 +423,17 @@ function generateMarkdownSummary(orders: DetailedOrder[], timeline: TimelineEven
     markdown += `- **Order ID**: ${order.referenceNumber}\n`;
     markdown += `- **Model**: ${order.modelCode}\n`;
     markdown += `- **Status**: ${order.orderStatus}\n`;
-    markdown += `- **VIN**: ${order.vin || 'Not assigned'}\n`;
+    markdown += `- **VIN**: ${order.vin || "Not assigned"}\n`;
 
     if (orderInfo?.reservationDate) {
-      markdown += `- **Reservation Date**: ${formatDate(orderInfo.reservationDate)}\n`;
+      markdown += `- **Reservation Date**: ${formatDate(
+        orderInfo.reservationDate
+      )}\n`;
     }
     if (orderInfo?.orderBookedDate) {
-      markdown += `- **Order Booked**: ${formatDate(orderInfo.orderBookedDate)}\n`;
+      markdown += `- **Order Booked**: ${formatDate(
+        orderInfo.orderBookedDate
+      )}\n`;
     }
     if (scheduling?.deliveryWindowDisplay) {
       markdown += `- **Delivery Window**: ${scheduling.deliveryWindowDisplay}\n`;
@@ -403,22 +442,24 @@ function generateMarkdownSummary(orders: DetailedOrder[], timeline: TimelineEven
       markdown += `- **Location**: ${orderInfo.routingLocationLabel}\n`;
     }
 
-    markdown += '\n';
+    markdown += "\n";
   });
 
   // Timeline section
   if (timeline.length > 0) {
-    markdown += '## Timeline\n\n';
-    timeline.slice(-10).forEach(event => { // Show last 10 events
+    markdown += "## Timeline\n\n";
+    timeline.slice(-10).forEach((event) => {
+      // Show last 10 events
       const date = new Date(event.timestamp).toLocaleDateString();
       const label = event.isNew ? `${event.label} (updated)` : event.label;
       markdown += `- **${date}**: ${label}\n`;
     });
-    markdown += '\n';
+    markdown += "\n";
   }
 
-  markdown += '---\n';
-  markdown += 'Generated by [Tesla Order Status Tracker](https://tesla-order-status.codext.de)\n';
+  markdown += "---\n";
+  markdown +=
+    "Generated by [Tesla Order Status Tracker](https://tesla-order-status.codext.de)\n";
 
   return markdown;
 }
@@ -436,7 +477,7 @@ export default function App() {
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [authCode, setAuthCode] = useState('');
+  const [authCode, setAuthCode] = useState("");
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -461,9 +502,13 @@ export default function App() {
   // Initialize from localStorage on mount
   useEffect(() => {
     const storedTokens = loadFromLocalStorage<TokenData>(STORAGE_KEYS.TOKENS);
-    const storedPrivacySettings = loadFromLocalStorage<PrivacySettings>(STORAGE_KEYS.PRIVACY_SETTINGS);
+    const storedPrivacySettings = loadFromLocalStorage<PrivacySettings>(
+      STORAGE_KEYS.PRIVACY_SETTINGS
+    );
     const storedHistory = getHistory();
-    const storedOrders = loadFromLocalStorage<DetailedOrder[]>(STORAGE_KEYS.ORDERS);
+    const storedOrders = loadFromLocalStorage<DetailedOrder[]>(
+      STORAGE_KEYS.ORDERS
+    );
 
     if (storedPrivacySettings) {
       setPrivacySettings(storedPrivacySettings);
@@ -506,14 +551,18 @@ export default function App() {
   // Handle click outside mobile menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+      if (
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target as Node)
+      ) {
         setMobileMenuOpen(false);
       }
     };
 
     if (mobileMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [mobileMenuOpen]);
 
@@ -525,15 +574,15 @@ export default function App() {
       }
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const checkAndRefreshToken = async (tokenData: TokenData) => {
     try {
-      const response = await fetch('/api/auth/check-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/auth/check-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accessToken: tokenData.access_token }),
       });
 
@@ -541,9 +590,9 @@ export default function App() {
 
       if (!result.valid && tokenData.refresh_token) {
         // Try to refresh the token
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const refreshResponse = await fetch("/api/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken: tokenData.refresh_token }),
         });
 
@@ -571,7 +620,7 @@ export default function App() {
         handleLogout();
       }
     } catch (err) {
-      console.error('Error checking token:', err);
+      console.error("Error checking token:", err);
       handleLogout();
     }
   };
@@ -582,7 +631,7 @@ export default function App() {
     setShowAuthModal(true);
 
     try {
-      const response = await fetch('/api/auth/generate-url');
+      const response = await fetch("/api/auth/generate-url");
       const data = await response.json();
 
       setAuthUrl(data.authUrl);
@@ -597,14 +646,14 @@ export default function App() {
 
       authWindowRef.current = window.open(
         data.authUrl,
-        'TeslaAuth',
+        "TeslaAuth",
         `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes`
       );
 
       // Start monitoring clipboard for automatic detection
       startClipboardMonitoring();
     } catch (err) {
-      setError('Failed to generate authentication URL');
+      setError("Failed to generate authentication URL");
       setShowAuthModal(false);
     } finally {
       setLoading(false);
@@ -617,7 +666,10 @@ export default function App() {
       clipboardIntervalRef.current = setInterval(async () => {
         try {
           const text = await navigator.clipboard.readText();
-          if (text.includes('auth.tesla.com/void/callback') && text.includes('code=')) {
+          if (
+            text.includes("auth.tesla.com/void/callback") &&
+            text.includes("code=")
+          ) {
             setAuthCode(text);
             if (clipboardIntervalRef.current) {
               clearInterval(clipboardIntervalRef.current);
@@ -632,7 +684,7 @@ export default function App() {
 
   const handleAuthCodeSubmit = async () => {
     if (!authCode || !sessionId) {
-      setError('Please enter the authorization URL');
+      setError("Please enter the authorization URL");
       return;
     }
 
@@ -642,24 +694,26 @@ export default function App() {
     try {
       // Extract code from URL
       let code = authCode;
-      if (authCode.includes('code=')) {
+      if (authCode.includes("code=")) {
         const url = new URL(authCode);
-        code = url.searchParams.get('code') || '';
+        code = url.searchParams.get("code") || "";
       }
 
       if (!code) {
-        throw new Error('No authorization code found in the URL');
+        throw new Error("No authorization code found in the URL");
       }
 
-      const response = await fetch('/api/auth/exchange-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/auth/exchange-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, sessionId }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to exchange code for tokens');
+        throw new Error(
+          errorData.error || "Failed to exchange code for tokens"
+        );
       }
 
       const tokenData = await response.json();
@@ -671,7 +725,7 @@ export default function App() {
       setTokens(tokensWithTime);
       saveToLocalStorage(STORAGE_KEYS.TOKENS, tokensWithTime);
       setIsAuthenticated(true);
-      setAuthCode('');
+      setAuthCode("");
       setAuthUrl(null);
       setSessionId(null);
       setShowAuthModal(false);
@@ -690,7 +744,7 @@ export default function App() {
       // Fetch orders immediately after authentication
       await fetchOrdersWithToken(tokensWithTime);
     } catch (err: any) {
-      setError(err.message || 'Failed to authenticate');
+      setError(err.message || "Failed to authenticate");
     } finally {
       setLoading(false);
     }
@@ -701,18 +755,18 @@ export default function App() {
     setError(null);
 
     try {
-      const ordersResponse = await fetch('/api/orders', {
+      const ordersResponse = await fetch("/api/orders", {
         headers: {
-          'Authorization': `Bearer ${tokenData.access_token}`,
+          Authorization: `Bearer ${tokenData.access_token}`,
         },
       });
 
       if (!ordersResponse.ok) {
         if (ordersResponse.status === 401) {
           handleLogout();
-          throw new Error('Authentication expired. Please log in again.');
+          throw new Error("Authentication expired. Please log in again.");
         }
-        throw new Error('Failed to fetch orders');
+        throw new Error("Failed to fetch orders");
       }
 
       const ordersData = await ordersResponse.json();
@@ -720,23 +774,32 @@ export default function App() {
       // Fetch detailed info for each order
       const detailedOrders: DetailedOrder[] = [];
       for (const order of ordersData) {
-        const detailsResponse = await fetch(`/api/orders/details?orderId=${order.referenceNumber}`, {
-          headers: {
-            'Authorization': `Bearer ${tokenData.access_token}`,
-          },
-        });
+        const detailsResponse = await fetch(
+          `/api/orders/details?orderId=${order.referenceNumber}`,
+          {
+            headers: {
+              Authorization: `Bearer ${tokenData.access_token}`,
+            },
+          }
+        );
 
         if (detailsResponse.ok) {
           const details = await detailsResponse.json();
 
           // Get store label
-          const routingLocation = details.tasks?.registration?.orderDetails?.vehicleRoutingLocation;
+          const routingLocation =
+            details.tasks?.registration?.orderDetails?.vehicleRoutingLocation;
           if (routingLocation) {
-            const storeResponse = await fetch(`/api/stores/label?storeId=${routingLocation}`);
+            const storeResponse = await fetch(
+              `/api/stores/label?storeId=${routingLocation}`
+            );
             if (storeResponse.ok) {
               const storeData = await storeResponse.json();
-              if (!details.tasks.registration.orderDetails.routingLocationLabel) {
-                details.tasks.registration.orderDetails.routingLocationLabel = storeData.label;
+              if (
+                !details.tasks.registration.orderDetails.routingLocationLabel
+              ) {
+                details.tasks.registration.orderDetails.routingLocationLabel =
+                  storeData.label;
               }
             }
           }
@@ -748,22 +811,30 @@ export default function App() {
       }
 
       // Compare with previous orders
-      const prevOrders = loadFromLocalStorage<DetailedOrder[]>(STORAGE_KEYS.ORDERS);
+      const prevOrders = loadFromLocalStorage<DetailedOrder[]>(
+        STORAGE_KEYS.ORDERS
+      );
       if (prevOrders) {
         const changes: ChangeOperation[] = [];
-        for (let i = 0; i < Math.max(prevOrders.length, detailedOrders.length); i++) {
+        for (
+          let i = 0;
+          i < Math.max(prevOrders.length, detailedOrders.length);
+          i++
+        ) {
           if (i < prevOrders.length && i < detailedOrders.length) {
-            changes.push(...compareDicts(prevOrders[i], detailedOrders[i], `Order ${i}.`));
+            changes.push(
+              ...compareDicts(prevOrders[i], detailedOrders[i], `Order ${i}.`)
+            );
           } else if (i >= detailedOrders.length) {
             changes.push({
               key: `Order ${i}`,
-              operation: 'removed',
+              operation: "removed",
               oldValue: prevOrders[i],
             });
           } else {
             changes.push({
               key: `Order ${i}`,
-              operation: 'added',
+              operation: "added",
               newValue: detailedOrders[i],
             });
           }
@@ -789,7 +860,7 @@ export default function App() {
       setOrders(detailedOrders);
       saveToLocalStorage(STORAGE_KEYS.ORDERS, detailedOrders);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch orders');
+      setError(err.message || "Failed to fetch orders");
     } finally {
       setLoading(false);
     }
@@ -812,7 +883,7 @@ export default function App() {
   };
 
   const handleClearData = () => {
-    if (confirm('Are you sure you want to clear all stored data?')) {
+    if (confirm("Are you sure you want to clear all stored data?")) {
       handleLogout();
       removeFromLocalStorage(STORAGE_KEYS.ORDERS);
       setShowComparison(false);
@@ -826,82 +897,117 @@ export default function App() {
     const finalPaymentData = details?.tasks?.finalPayment?.data || {};
 
     const statusColors: Record<string, string> = {
-      ordered: 'bg-green-900/20 text-green-400 border-green-900',
-      active: 'bg-green-900/20 text-green-400 border-green-900',
-      pending: 'bg-yellow-900/20 text-yellow-400 border-yellow-900',
-      delivered: 'bg-blue-900/20 text-blue-400 border-blue-900',
+      ordered: "bg-green-900/20 text-green-400 border-green-900",
+      active: "bg-green-900/20 text-green-400 border-green-900",
+      pending: "bg-yellow-900/20 text-yellow-400 border-yellow-900",
+      delivered: "bg-blue-900/20 text-blue-400 border-blue-900",
     };
 
     return (
-      <div key={order.referenceNumber} className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-900/20 hover:border-red-900/30 transition-all duration-300">
+      <div
+        key={order.referenceNumber}
+        className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-900/20 hover:border-red-900/30 transition-all duration-300"
+      >
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-white">Order #{index + 1}</h3>
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${statusColors[order.orderStatus?.toLowerCase()] || 'bg-gray-900/20 text-gray-400 border-gray-800'}`}>
+          <h3 className="text-lg font-semibold text-white">
+            Order #{index + 1}
+          </h3>
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${
+              statusColors[order.orderStatus?.toLowerCase()] ||
+              "bg-gray-900/20 text-gray-400 border-gray-800"
+            }`}
+          >
             {order.orderStatus}
           </span>
         </div>
 
         <div className="space-y-6">
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Order Details</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
+              Order Details
+            </h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">Order ID</span>
-                <p className="text-sm font-medium text-white">{order.referenceNumber}</p>
+                <p className="text-sm font-medium text-white">
+                  {order.referenceNumber}
+                </p>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">Model</span>
-                <p className="text-sm font-medium text-white">{order.modelCode}</p>
+                <p className="text-sm font-medium text-white">
+                  {order.modelCode}
+                </p>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">VIN</span>
-                <p className="text-sm font-medium text-white">{order.vin || 'Not assigned'}</p>
+                <p className="text-sm font-medium text-white">
+                  {order.vin || "Not assigned"}
+                </p>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">Odometer</span>
                 <p className="text-sm font-medium text-white">
-                  {orderInfo.vehicleOdometer || 'N/A'} {orderInfo.vehicleOdometerType || ''}
+                  {orderInfo.vehicleOdometer || "N/A"}{" "}
+                  {orderInfo.vehicleOdometerType || ""}
                 </p>
               </div>
             </div>
           </div>
 
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Dates</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
+              Dates
+            </h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">Reservation</span>
-                <p className="text-sm font-medium text-white">{formatDate(orderInfo.reservationDate)}</p>
+                <p className="text-sm font-medium text-white">
+                  {formatDate(orderInfo.reservationDate)}
+                </p>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">Order Booked</span>
-                <p className="text-sm font-medium text-white">{formatDate(orderInfo.orderBookedDate)}</p>
+                <p className="text-sm font-medium text-white">
+                  {formatDate(orderInfo.orderBookedDate)}
+                </p>
               </div>
             </div>
           </div>
 
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Delivery Information</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
+              Delivery Information
+            </h4>
             <div className="space-y-3">
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">Routing Location</span>
                 <p className="text-sm font-medium text-white">
-                  {orderInfo.routingLocationLabel || orderInfo.vehicleRoutingLocation || 'N/A'}
+                  {orderInfo.routingLocationLabel ||
+                    orderInfo.vehicleRoutingLocation ||
+                    "N/A"}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <span className="text-xs text-gray-500">Delivery Window</span>
-                  <p className="text-sm font-medium text-white">{scheduling.deliveryWindowDisplay || 'Not scheduled'}</p>
+                  <p className="text-sm font-medium text-white">
+                    {scheduling.deliveryWindowDisplay || "Not scheduled"}
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <span className="text-xs text-gray-500">ETA to Center</span>
-                  <p className="text-sm font-medium text-white">{finalPaymentData.etaToDeliveryCenter || 'N/A'}</p>
+                  <p className="text-sm font-medium text-white">
+                    {finalPaymentData.etaToDeliveryCenter || "N/A"}
+                  </p>
                 </div>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-gray-500">Appointment</span>
-                <p className="text-sm font-medium text-white">{scheduling.apptDateTimeAddressStr || 'Not scheduled'}</p>
+                <p className="text-sm font-medium text-white">
+                  {scheduling.apptDateTimeAddressStr || "Not scheduled"}
+                </p>
               </div>
             </div>
           </div>
@@ -928,7 +1034,7 @@ export default function App() {
                     disabled={loading}
                     className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading ? 'Refreshing...' : 'Refresh Orders'}
+                    {loading ? "Refreshing..." : "Refresh Orders"}
                   </button>
                   <button
                     onClick={handleLogout}
@@ -988,15 +1094,37 @@ export default function App() {
                   {loading ? (
                     <span className="flex items-center gap-2">
                       <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="none"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
                       </svg>
                       Refreshing...
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
                       </svg>
                       Refresh Orders
                     </span>
@@ -1010,8 +1138,18 @@ export default function App() {
                   className="w-full px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all duration-200 border border-gray-700 hover:border-gray-600 text-left"
                 >
                   <span className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      />
                     </svg>
                     Logout
                   </span>
@@ -1024,8 +1162,18 @@ export default function App() {
                   className="w-full px-4 py-3 bg-red-900/20 hover:bg-red-900/30 text-red-400 rounded-lg font-medium transition-all duration-200 border border-red-900/50 hover:border-red-900 text-left"
                 >
                   <span className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
                     </svg>
                     Clear Data
                   </span>
@@ -1045,21 +1193,23 @@ export default function App() {
                 Authenticate with Tesla
               </h2>
               <p className="text-gray-400 mb-8">
-                Connect your Tesla account to track your order status in real-time.
+                Connect your Tesla account to track your order status in
+                real-time.
               </p>
               <button
                 onClick={handleStartAuth}
                 disabled={loading}
                 className="w-full px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-red-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Starting...' : 'Start Authentication'}
+                {loading ? "Starting..." : "Start Authentication"}
               </button>
               <div className="mt-4 space-y-2">
                 <p className="text-xs text-gray-500">
                   A popup window will open for Tesla login.
                 </p>
                 <p className="text-xs text-amber-400">
-                  iPhone users: Disable Safari&apos;s pop-up blocker (Settings → Safari → enable Allow Pop-ups) so the login window can open.
+                  iPhone users: Disable Safari&apos;s pop-up blocker (Settings →
+                  Safari → enable Allow Pop-ups) so the login window can open.
                 </p>
               </div>
               {error && (
@@ -1073,7 +1223,9 @@ export default function App() {
           <>
             {/* Controls */}
             <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Settings</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Settings
+              </h3>
               <div className="space-y-4">
                 <label className="flex items-center gap-3 cursor-pointer group">
                   <input
@@ -1082,14 +1234,18 @@ export default function App() {
                     onChange={(e) => setAutoRefresh(e.target.checked)}
                     className="w-5 h-5 rounded border-gray-700 bg-gray-800 text-red-600 focus:ring-red-900 focus:ring-offset-0"
                   />
-                  <span className="text-gray-300 group-hover:text-white transition-colors">Auto-refresh orders</span>
+                  <span className="text-gray-300 group-hover:text-white transition-colors">
+                    Auto-refresh orders
+                  </span>
                 </label>
                 {autoRefresh && (
                   <div className="ml-8 flex items-center gap-3">
                     <label className="text-gray-400">Refresh every:</label>
                     <select
                       value={refreshInterval}
-                      onChange={(e) => setRefreshInterval(parseInt(e.target.value))}
+                      onChange={(e) =>
+                        setRefreshInterval(parseInt(e.target.value))
+                      }
                       className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-red-900 focus:outline-none focus:ring-1 focus:ring-red-900"
                     >
                       <option value={5}>5 minutes</option>
@@ -1116,7 +1272,9 @@ export default function App() {
 
                 {/* New TOST feature toggles */}
                 <div className="border-t border-gray-700 pt-4 mt-4">
-                  <h4 className="text-sm font-semibold text-gray-400 mb-3">Features</h4>
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3">
+                    Features
+                  </h4>
                   <div className="space-y-3">
                     <label className="flex items-center gap-3 cursor-pointer group">
                       <input
@@ -1142,7 +1300,9 @@ export default function App() {
                     </label>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setShowPrivacySettings(!showPrivacySettings)}
+                        onClick={() =>
+                          setShowPrivacySettings(!showPrivacySettings)
+                        }
                         className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all duration-200 border border-gray-700 hover:border-gray-600"
                       >
                         Privacy Settings
@@ -1162,10 +1322,15 @@ export default function App() {
             {/* Timeline */}
             {showTimeline && timeline.length > 0 && (
               <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
-                <h3 className="text-lg font-semibold text-blue-400 mb-4">Timeline</h3>
+                <h3 className="text-lg font-semibold text-blue-400 mb-4">
+                  Timeline
+                </h3>
                 <div className="space-y-4">
                   {timeline.map((event, index) => (
-                    <div key={index} className="flex items-start gap-4 border-l-2 border-blue-600 pl-4">
+                    <div
+                      key={index}
+                      className="flex items-start gap-4 border-l-2 border-blue-600 pl-4"
+                    >
                       <div className="flex-shrink-0 w-24 text-sm text-gray-500">
                         {new Date(event.timestamp).toLocaleDateString()}
                       </div>
@@ -1181,7 +1346,9 @@ export default function App() {
                           </span>
                         </div>
                         <div className="text-sm text-gray-400 mt-1">
-                          {typeof event.value === 'string' ? event.value : JSON.stringify(event.value)}
+                          {typeof event.value === "string"
+                            ? event.value
+                            : JSON.stringify(event.value)}
                         </div>
                       </div>
                     </div>
@@ -1193,31 +1360,48 @@ export default function App() {
             {/* History */}
             {showHistory && history.length > 0 && (
               <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
-                <h3 className="text-lg font-semibold text-purple-400 mb-4">Change History</h3>
+                <h3 className="text-lg font-semibold text-purple-400 mb-4">
+                  Change History
+                </h3>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {history.slice().reverse().map((entry, index) => (
-                    <div key={index} className="border-b border-gray-800 pb-4 last:border-0">
-                      <div className="text-sm text-gray-500 mb-2">
-                        {new Date(entry.timestamp).toLocaleString()}
+                  {history
+                    .slice()
+                    .reverse()
+                    .map((entry, index) => (
+                      <div
+                        key={index}
+                        className="border-b border-gray-800 pb-4 last:border-0"
+                      >
+                        <div className="text-sm text-gray-500 mb-2">
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </div>
+                        <div className="font-mono text-sm space-y-1">
+                          {entry.changes.map((change, changeIndex) => (
+                            <div
+                              key={changeIndex}
+                              className={`${
+                                change.operation === "added"
+                                  ? "text-green-400"
+                                  : change.operation === "removed"
+                                  ? "text-red-400"
+                                  : "text-yellow-400"
+                              }`}
+                            >
+                              {change.operation === "added" &&
+                                `+ ${change.key}: ${JSON.stringify(
+                                  change.newValue
+                                )}`}
+                              {change.operation === "removed" &&
+                                `- ${change.key}`}
+                              {change.operation === "changed" &&
+                                `≠ ${change.key}: ${JSON.stringify(
+                                  change.oldValue
+                                )} → ${JSON.stringify(change.newValue)}`}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="font-mono text-sm space-y-1">
-                        {entry.changes.map((change, changeIndex) => (
-                          <div
-                            key={changeIndex}
-                            className={`${
-                              change.operation === 'added' ? 'text-green-400' :
-                              change.operation === 'removed' ? 'text-red-400' :
-                              'text-yellow-400'
-                            }`}
-                          >
-                            {change.operation === 'added' && `+ ${change.key}: ${JSON.stringify(change.newValue)}`}
-                            {change.operation === 'removed' && `- ${change.key}`}
-                            {change.operation === 'changed' && `≠ ${change.key}: ${JSON.stringify(change.oldValue)} → ${JSON.stringify(change.newValue)}`}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
             )}
@@ -1225,20 +1409,30 @@ export default function App() {
             {/* Privacy Settings Panel */}
             {showPrivacySettings && (
               <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
-                <h3 className="text-lg font-semibold text-green-400 mb-4">Privacy Settings</h3>
+                <h3 className="text-lg font-semibold text-green-400 mb-4">
+                  Privacy Settings
+                </h3>
                 <div className="space-y-4">
                   <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={privacySettings.maskVIN}
                       onChange={(e) => {
-                        const newSettings = { ...privacySettings, maskVIN: e.target.checked };
+                        const newSettings = {
+                          ...privacySettings,
+                          maskVIN: e.target.checked,
+                        };
                         setPrivacySettings(newSettings);
-                        saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                        saveToLocalStorage(
+                          STORAGE_KEYS.PRIVACY_SETTINGS,
+                          newSettings
+                        );
                       }}
                       className="w-5 h-5 rounded border-gray-700 bg-gray-800 text-red-600 focus:ring-red-900 focus:ring-offset-0"
                     />
-                    <span className="text-gray-300 group-hover:text-white transition-colors">Mask VIN</span>
+                    <span className="text-gray-300 group-hover:text-white transition-colors">
+                      Mask VIN
+                    </span>
                   </label>
                   {privacySettings.maskVIN && (
                     <div className="ml-8 flex items-center gap-3">
@@ -1249,9 +1443,15 @@ export default function App() {
                         max="17"
                         value={privacySettings.vinMaskLength}
                         onChange={(e) => {
-                          const newSettings = { ...privacySettings, vinMaskLength: parseInt(e.target.value) || 0 };
+                          const newSettings = {
+                            ...privacySettings,
+                            vinMaskLength: parseInt(e.target.value) || 0,
+                          };
                           setPrivacySettings(newSettings);
-                          saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                          saveToLocalStorage(
+                            STORAGE_KEYS.PRIVACY_SETTINGS,
+                            newSettings
+                          );
                         }}
                         className="w-20 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-red-900 focus:outline-none focus:ring-1 focus:ring-red-900"
                       />
@@ -1263,13 +1463,21 @@ export default function App() {
                       type="checkbox"
                       checked={privacySettings.maskOrderId}
                       onChange={(e) => {
-                        const newSettings = { ...privacySettings, maskOrderId: e.target.checked };
+                        const newSettings = {
+                          ...privacySettings,
+                          maskOrderId: e.target.checked,
+                        };
                         setPrivacySettings(newSettings);
-                        saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                        saveToLocalStorage(
+                          STORAGE_KEYS.PRIVACY_SETTINGS,
+                          newSettings
+                        );
                       }}
                       className="w-5 h-5 rounded border-gray-700 bg-gray-800 text-red-600 focus:ring-red-900 focus:ring-offset-0"
                     />
-                    <span className="text-gray-300 group-hover:text-white transition-colors">Mask Order ID</span>
+                    <span className="text-gray-300 group-hover:text-white transition-colors">
+                      Mask Order ID
+                    </span>
                   </label>
                   {privacySettings.maskOrderId && (
                     <div className="ml-8 flex items-center gap-3">
@@ -1280,9 +1488,15 @@ export default function App() {
                         max="20"
                         value={privacySettings.orderIdMaskLength}
                         onChange={(e) => {
-                          const newSettings = { ...privacySettings, orderIdMaskLength: parseInt(e.target.value) || 0 };
+                          const newSettings = {
+                            ...privacySettings,
+                            orderIdMaskLength: parseInt(e.target.value) || 0,
+                          };
                           setPrivacySettings(newSettings);
-                          saveToLocalStorage(STORAGE_KEYS.PRIVACY_SETTINGS, newSettings);
+                          saveToLocalStorage(
+                            STORAGE_KEYS.PRIVACY_SETTINGS,
+                            newSettings
+                          );
                         }}
                         className="w-20 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-red-900 focus:outline-none focus:ring-1 focus:ring-red-900"
                       />
@@ -1303,16 +1517,20 @@ export default function App() {
             {/* Comparison */}
             {showComparison && differences.length > 0 && (
               <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-xl p-6 mb-6">
-                <h3 className="text-lg font-semibold text-yellow-400 mb-4">Changes Detected</h3>
+                <h3 className="text-lg font-semibold text-yellow-400 mb-4">
+                  Changes Detected
+                </h3>
                 <div className="bg-black/50 rounded-lg p-4 max-h-96 overflow-y-auto">
                   <div className="font-mono text-sm space-y-1">
                     {differences.map((diff, index) => (
                       <div
                         key={index}
                         className={`${
-                          diff.startsWith('+') ? 'text-green-400' :
-                          diff.startsWith('-') ? 'text-red-400' :
-                          'text-gray-400'
+                          diff.startsWith("+")
+                            ? "text-green-400"
+                            : diff.startsWith("-")
+                            ? "text-red-400"
+                            : "text-gray-400"
                         }`}
                       >
                         {diff}
@@ -1332,7 +1550,10 @@ export default function App() {
                 </div>
               ) : orders.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
-                  <p>No orders found. Click "Refresh Orders" to check for updates.</p>
+                  <p>
+                    No orders found. Click "Refresh Orders" to check for
+                    updates.
+                  </p>
                 </div>
               ) : (
                 <div className="grid gap-6 md:grid-cols-2">
@@ -1348,23 +1569,30 @@ export default function App() {
       {showAuthModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 max-w-lg w-full">
-            <h3 className="text-2xl font-bold text-white mb-4">Complete Authentication</h3>
+            <h3 className="text-2xl font-bold text-white mb-4">
+              Complete Authentication
+            </h3>
 
             <div className="space-y-4">
               <div className="bg-blue-900/20 border border-blue-900/50 rounded-lg p-4">
                 <p className="text-blue-400 text-sm">
-                  <strong>Step 1:</strong> Log in with your Tesla account in the popup window
+                  <strong>Step 1:</strong> Log in with your Tesla account in the
+                  popup window
                 </p>
                 <p className="text-blue-400 text-sm mt-2">
-                  <strong>Step 2:</strong> After login, you'll see a "Page Not Found" error - this is normal!
+                  <strong>Step 2:</strong> After login, you'll see a "Page Not
+                  Found" error - this is normal!
                 </p>
                 <p className="text-blue-400 text-sm mt-2">
-                  <strong>Step 3:</strong> Copy the entire URL from that page and paste it below
+                  <strong>Step 3:</strong> Copy the entire URL from that page
+                  and paste it below
                 </p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-gray-400 text-sm">Paste the redirect URL here:</label>
+                <label className="text-gray-400 text-sm">
+                  Paste the redirect URL here:
+                </label>
                 <textarea
                   value={authCode}
                   onChange={(e) => setAuthCode(e.target.value)}
@@ -1386,14 +1614,17 @@ export default function App() {
                   disabled={loading || !authCode}
                   className="flex-1 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Authenticating...' : 'Complete Authentication'}
+                  {loading ? "Authenticating..." : "Complete Authentication"}
                 </button>
                 <button
                   onClick={() => {
                     setShowAuthModal(false);
-                    setAuthCode('');
+                    setAuthCode("");
                     setError(null);
-                    if (authWindowRef.current && !authWindowRef.current.closed) {
+                    if (
+                      authWindowRef.current &&
+                      !authWindowRef.current.closed
+                    ) {
                       authWindowRef.current.close();
                     }
                     if (clipboardIntervalRef.current) {
@@ -1414,18 +1645,23 @@ export default function App() {
       {showShareModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <h3 className="text-2xl font-bold text-white mb-4">Share Order Status</h3>
+            <h3 className="text-2xl font-bold text-white mb-4">
+              Share Order Status
+            </h3>
 
             <div className="space-y-4">
               <div className="bg-blue-900/20 border border-blue-900/50 rounded-lg p-4">
                 <p className="text-blue-400 text-sm">
-                  Generate a shareable summary of your order status. Sensitive information will be masked according to your privacy settings.
+                  Generate a shareable summary of your order status. Sensitive
+                  information will be masked according to your privacy settings.
                 </p>
               </div>
 
               {/* Preview */}
               <div className="space-y-2">
-                <label className="text-gray-400 text-sm font-semibold">Preview:</label>
+                <label className="text-gray-400 text-sm font-semibold">
+                  Preview:
+                </label>
                 <div className="bg-black/50 rounded-lg p-4 max-h-96 overflow-y-auto">
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono">
                     {generateMarkdownSummary(orders, timeline, privacySettings)}
@@ -1436,13 +1672,19 @@ export default function App() {
               <div className="flex gap-3">
                 <button
                   onClick={async () => {
-                    const markdown = generateMarkdownSummary(orders, timeline, privacySettings);
+                    const markdown = generateMarkdownSummary(
+                      orders,
+                      timeline,
+                      privacySettings
+                    );
                     try {
                       await navigator.clipboard.writeText(markdown);
-                      alert('Summary copied to clipboard!');
+                      alert("Summary copied to clipboard!");
                     } catch (err) {
-                      console.error('Failed to copy:', err);
-                      alert('Failed to copy to clipboard. Please copy manually from the preview above.');
+                      console.error("Failed to copy:", err);
+                      alert(
+                        "Failed to copy to clipboard. Please copy manually from the preview above."
+                      );
                     }
                   }}
                   className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium transition-all duration-200"
@@ -1466,18 +1708,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
           <p className="text-gray-400">Tesla Order Status Tracker</p>
           <p className="text-xs text-gray-600 mt-2">
-            Your authentication tokens and order data are stored locally in your browser
-          </p>
-          <p className="text-xs text-gray-600 mt-2">
-            Forked from{' '}
-            <a
-              href="https://github.com/niklaswa/tesla-order-status"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 underline"
-            >
-              niklaswa/tesla-order-status
-            </a>
+            Your authentication tokens and order data are stored locally in your
+            browser
           </p>
         </div>
       </footer>
@@ -1486,5 +1718,5 @@ export default function App() {
 }
 
 // Mount the app
-const root = createRoot(document.getElementById('root')!);
+const root = createRoot(document.getElementById("root")!);
 root.render(<App />);
